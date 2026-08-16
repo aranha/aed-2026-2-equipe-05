@@ -1,0 +1,28 @@
+demo:
+  topico: banco.credito.solicitado.v1
+
+spring:
+  application:
+    name: servico-solicitacao-credito
+
+  kafka:
+    bootstrap-servers: localhost:19092
+
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+        spring.json.add.type.headers: false
+
+server:
+  port: 8080
+
+logging:
+  level:
+    root: WARN
+    br.pucminas.aed: INFO
+    org.springframework.boot: INFO
+  pattern:
+    console: "%d{HH:mm:ss} %-5level %-28logger{0} : %msg%n"
