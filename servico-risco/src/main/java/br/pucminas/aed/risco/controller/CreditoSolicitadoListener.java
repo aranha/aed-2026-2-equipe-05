@@ -3,6 +3,7 @@ package br.pucminas.aed.risco.controller;
 import br.pucminas.aed.risco.domain.CreditoSolicitadoEvent;
 import br.pucminas.aed.risco.service.AnaliseCreditoService;
 import java.nio.charset.StandardCharsets;
+import lombok.RequiredArgsConstructor;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.header.Header;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -10,12 +11,9 @@ import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Component;
 
 @Component
+@RequiredArgsConstructor
 public class CreditoSolicitadoListener {
     private final AnaliseCreditoService analiseCreditoService;
-
-    public CreditoSolicitadoListener(AnaliseCreditoService analiseCreditoService) {
-        this.analiseCreditoService = analiseCreditoService;
-    }
 
     @KafkaListener(topics = "${app.kafka.topico.credito-solicitado}")
     public void receber(ConsumerRecord<String, CreditoSolicitadoEvent> registro,

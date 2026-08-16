@@ -1,14 +1,14 @@
 package br.pucminas.aed.risco.service;
 
 import br.pucminas.aed.risco.domain.CreditoSolicitadoEvent;
+import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 @Repository
+@RequiredArgsConstructor
 public class AnaliseCreditoRepository {
     private final JdbcTemplate bancoDeDados;
-
-    public AnaliseCreditoRepository(JdbcTemplate bancoDeDados) { this.bancoDeDados = bancoDeDados; }
 
     public void criar(CreditoSolicitadoEvent evento) {
         bancoDeDados.update("""

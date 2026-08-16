@@ -1,13 +1,13 @@
 package br.pucminas.aed.risco.service;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 @Repository
+@RequiredArgsConstructor
 public class EventoProcessadoRepository {
     private final JdbcTemplate bancoDeDados;
-
-    public EventoProcessadoRepository(JdbcTemplate bancoDeDados) { this.bancoDeDados = bancoDeDados; }
 
     public boolean registrarSeNovo(String eventoId) {
         int linhas = bancoDeDados.update(
