@@ -29,7 +29,7 @@ class CreditoServiceTest {
                 "credito.solicitacao.solicitada.v1");
 
         var evento = service.solicitar(new SolicitacaoCreditoVO(
-                "cli-001", new BigDecimal("15000.00"), "APP"));
+                null, null, "cli-001", new BigDecimal("15000.00"), "APP"));
 
         ArgumentCaptor<ProducerRecord<String, CreditoSolicitadoEvent>> captor =
                 ArgumentCaptor.forClass(ProducerRecord.class);
