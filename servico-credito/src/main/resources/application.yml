@@ -1,0 +1,18 @@
+spring:
+  application:
+    name: servico-credito
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:19092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+        spring.json.add.type.headers: false
+server:
+  port: 8080
+app:
+  kafka:
+    topico:
+      credito-solicitado: credito.solicitacao.solicitada.v1

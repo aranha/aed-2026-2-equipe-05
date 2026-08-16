@@ -1,0 +1,31 @@
+spring:
+  application:
+    name: servico-risco
+  main:
+    web-application-type: none
+  datasource:
+    url: ${BANCO_URL:jdbc:postgresql://localhost:15432/aed}
+    username: ${BANCO_USUARIO:aed}
+    password: ${BANCO_SENHA:aed}
+  sql:
+    init:
+      mode: always
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:19092}
+    consumer:
+      group-id: risco-credito-v1
+      enable-auto-commit: false
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: com.aed20262equipe05.risco.domain
+        spring.json.use.type.headers: false
+        spring.json.value.default.type: com.aed20262equipe05.risco.domain.CreditoSolicitadoEvent
+        metadata.max.age.ms: 5000
+    listener:
+      ack-mode: manual_immediate
+app:
+  kafka:
+    topico:
+      credito-solicitado: credito.solicitacao.solicitada.v1
