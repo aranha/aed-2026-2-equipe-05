@@ -4,15 +4,15 @@ Projeto com serviços para solicitação e análise de crédito usando Spring Bo
 
 ## Integrantes
 
-| Nome                                                    | Matrícula  | 
-|---------------------------------------------------------|------------|
-| Paulo Euclydes Aranha Junior (**Líder**)                | 255171     | 
-| Vinícius Eduardo Silva Oliveira                         | 1310290    | 
-| Marcus Vinicius da Cruz Santos                          | 255495     | 
-| Rafael Oliveira de Lima                                 | 258889     |
-| Guilherme Nunes Faria                                   |            |
-| Hugo Fontolan PianiHugo Fontolan Piani                  |            |
-| Sesaque de Oliveira da CruzSesaque de Oliveira da Cruz  |            |
+| Nome                                     | Matrícula  | 
+|------------------------------------------|------------|
+| Paulo Euclydes Aranha Junior (**Líder**) | 255171     | 
+| Vinícius Eduardo Silva Oliveira          | 1310290    | 
+| Marcus Vinicius da Cruz Santos           | 255495     | 
+| Rafael Oliveira de Lima                  | 258889     |
+| Guilherme Nunes Faria                    |            |
+| Hugo Fontolan Piani                      |            |
+| Sesaque de Oliveira da Cruz              | 254176     |
 
 ## Pré-requisitos
 
@@ -193,8 +193,13 @@ mvn -f servico-risco/pom.xml -Dtest=IdempotenciaTest test
 
 ## Parar o ambiente
 
-Para parar os containers:
+Para somente parar os containers:
 
 ```powershell
-docker compose down
+docker compose stop
+```
+
+Para remover os containers e apagar os dados persistidos do Kafka e PostgreSQL:
+```powershell
+docker compose down -v
 ```

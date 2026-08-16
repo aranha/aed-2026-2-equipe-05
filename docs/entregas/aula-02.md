@@ -75,12 +75,12 @@ docker compose down
 
 ## Quem fez o quê
 
-| Integrante | Contribuição nesta etapa                                                                          |
-|---|---------------------------------------------------------------------------------------------------|
-| Paulo Euclydes Aranha Junior | Liderança da equipe, definição do domínio de concessão de crédito, apoio na ADR e commit inicial. |
-| Vinícius Eduardo Silva Oliveira | Participação ativa na decisão de domínio e escrita do ADR.                                        |
-| Marcus Vinicius da Cruz Santos | Participação ativa na decisão de domínio e escrita do ADR (commit inicial do mesmo).              |
-| Rafael Oliveira de Lima | Participação ativa na decisão de domínio e escrita do ADR. Criação do README.md.                  |
-| Guilherme Nunes Faria |                                                                                                   |
-| Hugo Fontolan Piani |                                                                                                   |
-| Sesaque de Oliveira da Cruz |                                                                                                   |
+| Integrante | Contribuição nesta etapa                                                                                                                                                                         |
+|---|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Paulo Euclydes Aranha Junior | Liderança da equipe, definição do domínio de concessão de crédito, apoio na ADR, commit inicial e criação do publisher e consumer, assim como os testes, idempotência, revisão antes da entrega. |
+| Vinícius Eduardo Silva Oliveira | Participação ativa na decisão de domínio e escrita do ADR.                                                                                                                                       |
+| Marcus Vinicius da Cruz Santos | Participação ativa na decisão de domínio e escrita do ADR (commit inicial do mesmo).                                                                                                             |
+| Rafael Oliveira de Lima | Participação ativa na decisão de domínio e escrita do ADR. Criação do README.md.                                                                                                                 |
+| Guilherme Nunes Faria |                                                                                                                                                                                                  |
+| Hugo Fontolan Piani |                                                                                                                                                                                                  |
+| Sesaque de Oliveira da Cruz | Participação na revisão de código com sugestões de melhoria                                                                                                                                      |
