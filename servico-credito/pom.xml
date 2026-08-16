@@ -9,7 +9,7 @@
         <version>3.3.5</version>
         <relativePath/>
     </parent>
-    <groupId>com.aed20262equipe05</groupId>
+    <groupId>br.pucminas.aed</groupId>
     <artifactId>servico-credito</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <properties><java.version>21</java.version></properties>

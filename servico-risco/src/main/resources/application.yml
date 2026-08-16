@@ -19,9 +19,9 @@ spring:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
-        spring.json.trusted.packages: com.aed20262equipe05.risco.domain
+        spring.json.trusted.packages: br.pucminas.aed.risco.domain
         spring.json.use.type.headers: false
-        spring.json.value.default.type: com.aed20262equipe05.risco.domain.CreditoSolicitadoEvent
+        spring.json.value.default.type: br.pucminas.aed.risco.domain.CreditoSolicitadoEvent
         metadata.max.age.ms: 5000
     listener:
       ack-mode: manual_immediate
