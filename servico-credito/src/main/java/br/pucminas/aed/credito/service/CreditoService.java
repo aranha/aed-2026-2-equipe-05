@@ -31,7 +31,7 @@ public class CreditoService {
         validar(solicitacao);
         var agora = OffsetDateTime.now();
         var evento = new CreditoSolicitadoEvent(
-                identificarEvento(solicitacao), identificarSolicitacao(solicitacao), solicitacao.getClienteId(),
+                UUID.randomUUID().toString(), UUID.randomUUID().toString(), solicitacao.getClienteId(),
                 solicitacao.getValorSolicitado(), agora, solicitacao.getCanalOrigem());
         var registro = new ProducerRecord<String, CreditoSolicitadoEvent>(
                 topico, evento.getSolicitacaoId(), evento);
@@ -45,27 +45,7 @@ public class CreditoService {
         return evento;
     }
 
-    private String identificarEvento(SolicitacaoCreditoVO solicitacao) {
-        if (solicitacao.getEventoId() == null || solicitacao.getEventoId().isBlank()) {
-            return UUID.randomUUID().toString();
-        }
-        return solicitacao.getEventoId();
-    }
-
-    private String identificarSolicitacao(SolicitacaoCreditoVO solicitacao) {
-        if (solicitacao.getSolicitacaoId() == null || solicitacao.getSolicitacaoId().isBlank()) {
-            return UUID.randomUUID().toString();
-        }
-        return solicitacao.getSolicitacaoId();
-    }
-
     private void validar(SolicitacaoCreditoVO solicitacao) {
-        if (solicitacao.getEventoId() != null && solicitacao.getEventoId().length() > 64) {
-            throw new IllegalArgumentException("eventoId deve ter no maximo 64 caracteres");
-        }
-        if (solicitacao.getSolicitacaoId() != null && solicitacao.getSolicitacaoId().length() > 36) {
-            throw new IllegalArgumentException("solicitacaoId deve ter no maximo 36 caracteres");
-        }
         if (solicitacao.getClienteId() == null || solicitacao.getClienteId().isBlank()) {
             throw new IllegalArgumentException("clienteId e obrigatorio");
         }

@@ -29,7 +29,7 @@ class CreditoServiceTest {
                 "credito.solicitacao.solicitada.v1");
 
         var evento = service.solicitar(new SolicitacaoCreditoVO(
-                null, null, "cli-001", new BigDecimal("15000.00"), "APP"));
+                "cli-001", new BigDecimal("15000.00"), "APP"));
 
         ArgumentCaptor<ProducerRecord<String, CreditoSolicitadoEvent>> captor =
                 ArgumentCaptor.forClass(ProducerRecord.class);
@@ -42,29 +42,6 @@ class CreditoServiceTest {
         assertThat(cabecalho(registro, "ce_type"))
                 .isEqualTo("credito.solicitacao.solicitada.v1");
         assertThat(cabecalho(registro, "ce_time")).isEqualTo(evento.getDataSolicitacao().toString());
-    }
-
-    @Test
-    void deveRepublicarOMesmoEventoQuandoOsIdentificadoresVemNaEntrada() {
-        KafkaTemplate<String, CreditoSolicitadoEvent> clienteDoBroker = mock(KafkaTemplate.class);
-        ResultadoPublicacaoService resultadoPublicacaoService = mock(ResultadoPublicacaoService.class);
-        CompletableFuture<SendResult<String, CreditoSolicitadoEvent>> futuro = new CompletableFuture<>();
-        when(clienteDoBroker.send(any(ProducerRecord.class))).thenReturn(futuro);
-        var service = new CreditoService(clienteDoBroker, resultadoPublicacaoService,
-                "credito.solicitacao.solicitada.v1");
-
-        var evento = service.solicitar(new SolicitacaoCreditoVO(
-                "evt-reentrega-manual-001", "sol-reentrega-manual-001", "cli-001",
-                new BigDecimal("15000.00"), "APP"));
-
-        ArgumentCaptor<ProducerRecord<String, CreditoSolicitadoEvent>> captor =
-                ArgumentCaptor.forClass(ProducerRecord.class);
-        verify(clienteDoBroker).send(captor.capture());
-        var registro = captor.getValue();
-        assertThat(evento.getEventoId()).isEqualTo("evt-reentrega-manual-001");
-        assertThat(evento.getSolicitacaoId()).isEqualTo("sol-reentrega-manual-001");
-        assertThat(cabecalho(registro, "ce_id")).isEqualTo("evt-reentrega-manual-001");
-        assertThat(registro.key()).isEqualTo("sol-reentrega-manual-001");
     }
 
     private String cabecalho(ProducerRecord<String, CreditoSolicitadoEvent> registro, String nome) {

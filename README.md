@@ -4,15 +4,15 @@ Projeto com serviços para solicitação e análise de crédito usando Spring Bo
 
 ## Integrantes
 
-| Nome                                     | Matrícula  | 
-|------------------------------------------|------------|
-| Paulo Euclydes Aranha Junior (**Líder**) | 255171     | 
-| Vinícius Eduardo Silva Oliveira          | 1310290    | 
-| Marcus Vinicius da Cruz Santos           | 255495     | 
-| Rafael Oliveira de Lima                  | 258889     |
-| Guilherme Nunes Faria                    |            |
-| Hugo Fontolan Piani                      |            |
-| Sesaque de Oliveira da Cruz              | 254176     |
+| Nome                                     | Matrícula | 
+|------------------------------------------|-----------|
+| Paulo Euclydes Aranha Junior (**Líder**) | 255171    | 
+| Vinícius Eduardo Silva Oliveira          | 1310290   | 
+| Marcus Vinicius da Cruz Santos           | 255495    | 
+| Rafael Oliveira de Lima                  | 258889    |
+| Guilherme Nunes Faria                    | 1474257   |
+| Hugo Fontolan Piani                      | 258724    |
+| Sesaque de Oliveira da Cruz              | 254176    |
 
 ## Pré-requisitos
 
@@ -169,13 +169,6 @@ Campos obrigatórios no corpo da requisição:
 
 Se algum campo obrigatório estiver ausente ou inválido, a API retorna HTTP `400 Bad Request` com a mensagem de erro.
 
-Campos opcionais, que existem para republicar o MESMO evento pela API:
-
-- `eventoId`: identidade do evento, com no máximo 64 caracteres. Vai no cabeçalho `ce_id` da mensagem, que é a chave de deduplicação do consumidor.
-- `solicitacaoId`: identidade da solicitação, com no máximo 36 caracteres. É a chave de partição da mensagem.
-
-Quando um deles é omitido, o serviço gera um UUID no lugar. Informar os dois republica literalmente o mesmo evento: mesmo `ce_id` e mesma partição.
-
 ## Idempotência
 
 O serviço de risco possui uma classe de teste dedicada para validar idempotência:
@@ -196,32 +189,6 @@ No Linux/macOS ou Git Bash:
 
 ```bash
 mvn -f servico-risco/pom.xml -Dtest=IdempotenciaTest test
-```
-
-### Reentrega manual pela API
-
-Com os dois serviços no ar, envie a MESMA requisição três vezes, informando `eventoId` e `solicitacaoId`:
-
-```bash
-for i in 1 2 3; do
-  curl -s -o /dev/null -w "%{http_code}\n" -X POST "http://localhost:8080/solicitacoes" \
-    -H "Content-Type: application/json" \
-    -d '{"eventoId":"evt-reentrega-manual-001","solicitacaoId":"sol-reentrega-manual-001","clienteId":"cliente-123","valorSolicitado":15000.00,"canalOrigem":"APP"}'
-done
-```
-
-No PowerShell, execute a linha abaixo três vezes:
-
-```powershell
-curl.exe --% -X POST "http://localhost:8080/solicitacoes" -H "Content-Type: application/json" -d "{\"eventoId\":\"evt-reentrega-manual-001\",\"solicitacaoId\":\"sol-reentrega-manual-001\",\"clienteId\":\"cliente-123\",\"valorSolicitado\":15000.00,\"canalOrigem\":\"APP\"}"
-```
-
-As três chamadas respondem `202`, mas o consumidor grava uma linha só. Confira no banco:
-
-```bash
-docker compose exec postgres psql -U aed -d aed \
-  -c "select count(*) from evento_processado where evento_id = 'evt-reentrega-manual-001';" \
-  -c "select count(*) from analise_credito where solicitacao_id = 'sol-reentrega-manual-001';"
 ```
 
 ## Parar o ambiente
