@@ -92,7 +92,7 @@ class IdempotenciaTest {
         registro.headers().add("ce_id", eventoId.getBytes(UTF_8));
         registro.headers().add("ce_source", "/credito/solicitacoes".getBytes(UTF_8));
         registro.headers().add("ce_type",
-                "credito.solicitacao.credito-solicitado.v1".getBytes(UTF_8));
+                "credito.solicitacao.solicitada.v1".getBytes(UTF_8));
         registro.headers().add("ce_time", "2026-08-15T20:30:00-03:00".getBytes(UTF_8));
         publicador.send(registro);
     }

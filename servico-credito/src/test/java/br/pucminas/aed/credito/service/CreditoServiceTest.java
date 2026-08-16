@@ -40,7 +40,7 @@ class CreditoServiceTest {
         assertThat(cabecalho(registro, "ce_id")).isEqualTo(evento.getEventoId());
         assertThat(cabecalho(registro, "ce_source")).isEqualTo("/credito/solicitacoes");
         assertThat(cabecalho(registro, "ce_type"))
-                .isEqualTo("credito.solicitacao.credito-solicitado.v1");
+                .isEqualTo("credito.solicitacao.solicitada.v1");
         assertThat(cabecalho(registro, "ce_time")).isEqualTo(evento.getDataSolicitacao().toString());
     }
 

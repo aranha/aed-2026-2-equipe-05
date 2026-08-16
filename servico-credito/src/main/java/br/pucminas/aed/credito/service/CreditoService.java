@@ -13,7 +13,7 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class CreditoService {
-    private static final String TIPO_EVENTO = "credito.solicitacao.credito-solicitado.v1";
+    private static final String TIPO_EVENTO = "credito.solicitacao.solicitada.v1";
     private static final String FONTE_EVENTO = "/credito/solicitacoes";
     private final KafkaTemplate<String, CreditoSolicitadoEvent> clienteDoBroker;
     private final ResultadoPublicacaoService resultadoPublicacaoService;
