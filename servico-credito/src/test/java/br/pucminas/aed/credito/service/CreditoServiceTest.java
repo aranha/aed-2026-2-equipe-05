@@ -1,6 +1,7 @@
 package br.pucminas.aed.credito.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -11,6 +12,7 @@ import br.pucminas.aed.credito.domain.CreditoSolicitadoEvent;
 import br.pucminas.aed.credito.domain.SolicitacaoCreditoVO;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.jupiter.api.Test;
@@ -65,6 +67,44 @@ class CreditoServiceTest {
         assertThat(evento.getSolicitacaoId()).isEqualTo("sol-reentrega-manual-001");
         assertThat(cabecalho(registro, "ce_id")).isEqualTo("evt-reentrega-manual-001");
         assertThat(registro.key()).isEqualTo("sol-reentrega-manual-001");
+    }
+
+    @Test
+    void deveAceitarIdentificadoresComOTamanhoDeUmUuid() {
+        KafkaTemplate<String, CreditoSolicitadoEvent> clienteDoBroker = mock(KafkaTemplate.class);
+        when(clienteDoBroker.send(any(ProducerRecord.class))).thenReturn(new CompletableFuture<>());
+        var service = new CreditoService(clienteDoBroker, mock(ResultadoPublicacaoService.class),
+                "credito.solicitacao.solicitada.v1");
+        var eventoId = UUID.randomUUID().toString();
+        var solicitacaoId = UUID.randomUUID().toString();
+
+        var evento = service.solicitar(new SolicitacaoCreditoVO(
+                eventoId, solicitacaoId, "cli-001", new BigDecimal("15000.00"), "APP"));
+
+        assertThat(evento.getEventoId()).isEqualTo(eventoId);
+        assertThat(evento.getSolicitacaoId()).isEqualTo(solicitacaoId);
+    }
+
+    @Test
+    void deveRecusarEventoIdMaiorQueOTamanhoDeUmUuid() {
+        var service = new CreditoService(mock(KafkaTemplate.class), mock(ResultadoPublicacaoService.class),
+                "credito.solicitacao.solicitada.v1");
+
+        assertThatThrownBy(() -> service.solicitar(new SolicitacaoCreditoVO(
+                "e".repeat(37), null, "cli-001", new BigDecimal("15000.00"), "APP")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("eventoId");
+    }
+
+    @Test
+    void deveRecusarSolicitacaoIdMaiorQueOTamanhoDeUmUuid() {
+        var service = new CreditoService(mock(KafkaTemplate.class), mock(ResultadoPublicacaoService.class),
+                "credito.solicitacao.solicitada.v1");
+
+        assertThatThrownBy(() -> service.solicitar(new SolicitacaoCreditoVO(
+                null, "s".repeat(37), "cli-001", new BigDecimal("15000.00"), "APP")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("solicitacaoId");
     }
 
     private String cabecalho(ProducerRecord<String, CreditoSolicitadoEvent> registro, String nome) {

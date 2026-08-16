@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 public class CreditoService {
     private static final String TIPO_EVENTO = "credito.solicitacao.solicitada.v1";
     private static final String FONTE_EVENTO = "/credito/solicitacoes";
+    private static final int TAMANHO_MAXIMO_DO_IDENTIFICADOR = 36;
     private final KafkaTemplate<String, CreditoSolicitadoEvent> clienteDoBroker;
     private final ResultadoPublicacaoService resultadoPublicacaoService;
     private final String topico;
@@ -31,8 +32,8 @@ public class CreditoService {
         validar(solicitacao);
         var agora = OffsetDateTime.now();
         var evento = new CreditoSolicitadoEvent(
-                identificarEvento(solicitacao), identificarSolicitacao(solicitacao), solicitacao.getClienteId(),
-                solicitacao.getValorSolicitado(), agora, solicitacao.getCanalOrigem());
+                identificarOuGerar(solicitacao.getEventoId()), identificarOuGerar(solicitacao.getSolicitacaoId()),
+                solicitacao.getClienteId(), solicitacao.getValorSolicitado(), agora, solicitacao.getCanalOrigem());
         var registro = new ProducerRecord<String, CreditoSolicitadoEvent>(
                 topico, evento.getSolicitacaoId(), evento);
         adicionarCabecalho(registro, "ce_specversion", "1.0");
@@ -45,27 +46,18 @@ public class CreditoService {
         return evento;
     }
 
-    private String identificarEvento(SolicitacaoCreditoVO solicitacao) {
-        if (solicitacao.getEventoId() == null || solicitacao.getEventoId().isBlank()) {
+    private String identificarOuGerar(String identificador) {
+        if (identificador == null || identificador.isBlank()) {
             return UUID.randomUUID().toString();
         }
-        return solicitacao.getEventoId();
+        return identificador;
     }
 
-    private String identificarSolicitacao(SolicitacaoCreditoVO solicitacao) {
-        if (solicitacao.getSolicitacaoId() == null || solicitacao.getSolicitacaoId().isBlank()) {
-            return UUID.randomUUID().toString();
-        }
-        return solicitacao.getSolicitacaoId();
+    private boolean excedeOTamanhoMaximo(String identificador) {
+        return identificador != null && identificador.length() > TAMANHO_MAXIMO_DO_IDENTIFICADOR;
     }
 
     private void validar(SolicitacaoCreditoVO solicitacao) {
-        if (solicitacao.getEventoId() != null && solicitacao.getEventoId().length() > 64) {
-            throw new IllegalArgumentException("eventoId deve ter no maximo 64 caracteres");
-        }
-        if (solicitacao.getSolicitacaoId() != null && solicitacao.getSolicitacaoId().length() > 36) {
-            throw new IllegalArgumentException("solicitacaoId deve ter no maximo 36 caracteres");
-        }
         if (solicitacao.getClienteId() == null || solicitacao.getClienteId().isBlank()) {
             throw new IllegalArgumentException("clienteId e obrigatorio");
         }
@@ -74,6 +66,14 @@ public class CreditoService {
         }
         if (solicitacao.getCanalOrigem() == null || solicitacao.getCanalOrigem().isBlank()) {
             throw new IllegalArgumentException("canalOrigem e obrigatorio");
+        }
+        if (excedeOTamanhoMaximo(solicitacao.getEventoId())) {
+            throw new IllegalArgumentException(
+                    "eventoId deve ter no maximo " + TAMANHO_MAXIMO_DO_IDENTIFICADOR + " caracteres");
+        }
+        if (excedeOTamanhoMaximo(solicitacao.getSolicitacaoId())) {
+            throw new IllegalArgumentException(
+                    "solicitacaoId deve ter no maximo " + TAMANHO_MAXIMO_DO_IDENTIFICADOR + " caracteres");
         }
     }
 

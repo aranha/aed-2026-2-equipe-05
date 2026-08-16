@@ -167,14 +167,14 @@ Campos obrigatórios no corpo da requisição:
 - `valorSolicitado`: valor positivo solicitado
 - `canalOrigem`: canal de origem da solicitação
 
+Campos opcionais, para republicar o MESMO evento pela API:
+
+- `eventoId`: identidade do evento. Vai no cabeçalho `ce_id`, que é a chave de deduplicação do consumidor.
+- `solicitacaoId`: identidade da solicitação. É a chave de partição da mensagem.
+
+Cada um aceita no máximo 36 caracteres, e acima disso a resposta é `400 Bad Request`. Quando omitido, é gerado um UUID.
+
 Se algum campo obrigatório estiver ausente ou inválido, a API retorna HTTP `400 Bad Request` com a mensagem de erro.
-
-Campos opcionais, que existem para republicar o MESMO evento pela API:
-
-- `eventoId`: identidade do evento, com no máximo 64 caracteres. Vai no cabeçalho `ce_id` da mensagem, que é a chave de deduplicação do consumidor.
-- `solicitacaoId`: identidade da solicitação, com no máximo 36 caracteres. É a chave de partição da mensagem.
-
-Quando um deles é omitido, o serviço gera um UUID no lugar. Informar os dois republica literalmente o mesmo evento: mesmo `ce_id` e mesma partição.
 
 ## Idempotência
 
