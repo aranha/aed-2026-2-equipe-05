@@ -1,13 +1,11 @@
-package com.aed20262equipe05;
+package br.pucminas.aed.risco;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class Aed20262Equipe05Application {
-
+public class RiscoApplication {
     public static void main(String[] args) {
-        SpringApplication.run(Aed20262Equipe05Application.class, args);
+        SpringApplication.run(RiscoApplication.class, args);
     }
-
 }
