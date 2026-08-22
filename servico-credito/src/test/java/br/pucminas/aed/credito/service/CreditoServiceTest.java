@@ -11,6 +11,7 @@ import br.pucminas.aed.credito.domain.CreditoSolicitadoEvent;
 import br.pucminas.aed.credito.domain.SolicitacaoCreditoVO;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.time.OffsetDateTime;
 import java.util.concurrent.CompletableFuture;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.jupiter.api.Test;
@@ -29,7 +30,7 @@ class CreditoServiceTest {
                 "credito.solicitacao.solicitada.v1");
 
         var evento = service.solicitar(new SolicitacaoCreditoVO(
-                "cli-001", new BigDecimal("15000.00"), "APP"));
+                "cli-001", new BigDecimal("15000.00"), "APP", OffsetDateTime.now()));
 
         ArgumentCaptor<ProducerRecord<String, CreditoSolicitadoEvent>> captor =
                 ArgumentCaptor.forClass(ProducerRecord.class);

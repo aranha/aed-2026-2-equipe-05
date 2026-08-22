@@ -91,7 +91,7 @@ No Linux/macOS ou Git Bash:
 java -jar servico-risco/target/servico-risco-0.0.1-SNAPSHOT.jar
 ```
 
-Esse serviço consome eventos do Kafka e grava os resultados no PostgreSQL.
+Esse serviço consome eventos do Kafka, grava os resultados da análise no PostgreSQL e mantém um consumidor separado para observar o fluxo de crédito solicitado por janelas de tempo.
 
 ## Como testar
 
@@ -167,7 +167,73 @@ Campos obrigatórios no corpo da requisição:
 - `valorSolicitado`: valor positivo solicitado
 - `canalOrigem`: canal de origem da solicitação
 
+Campo opcional:
+
+- `dataSolicitacao`: data e hora de ocorrência da solicitação. Quando esse campo não é informado, o `servico-credito` usa a data e hora atual. Informar esse campo é útil para simular cenários de janelas de tempo de forma mais fácil.
+
 Se algum campo obrigatório estiver ausente ou inválido, a API retorna HTTP `400 Bad Request` com a mensagem de erro.
+
+## Consumidor de fluxo por janela de tempo
+
+Além do consumidor principal de análise de risco, o `servico-risco` possui o consumidor `FluxoCreditoSolicitadoListener`, que lê o mesmo tópico Kafka `credito.solicitacao.solicitada.v1` usando o grupo próprio `risco-fluxo-creditos-v1`.
+
+Esse consumidor responde à pergunta: **qual foi o volume de crédito solicitado a cada janela fixa de 5 minutos?**
+
+A agregação usa o relógio de ocorrência do evento, ou seja, o campo `dataSolicitacao`. As janelas são alinhadas em blocos fixos de 5 minutos: `12:00`, `12:05`, `12:10`, e assim por diante. O resultado aparece no log do `servico-risco`.
+
+Para testar, deixe o `servico-credito` e o `servico-risco` rodando e envie solicitações com `dataSolicitacao` informada.
+
+Exemplo usando `curl` no PowerShell, enviando dois eventos para a janela de `12:00`:
+
+```powershell
+curl.exe --% -X POST "http://localhost:8080/solicitacoes" -H "Content-Type: application/json" -d "{\"clienteId\":\"cliente-123\",\"valorSolicitado\":1000.00,\"canalOrigem\":\"APP\",\"dataSolicitacao\":\"2026-08-22T12:02:34-03:00\"}"
+curl.exe --% -X POST "http://localhost:8080/solicitacoes" -H "Content-Type: application/json" -d "{\"clienteId\":\"cliente-456\",\"valorSolicitado\":2000.00,\"canalOrigem\":\"APP\",\"dataSolicitacao\":\"2026-08-22T12:04:10-03:00\"}"
+```
+
+Exemplo usando `curl` no PowerShell, enviando um evento para a janela de `12:05`:
+
+```powershell
+curl.exe --% -X POST "http://localhost:8080/solicitacoes" -H "Content-Type: application/json" -d "{\"clienteId\":\"cliente-789\",\"valorSolicitado\":5000.00,\"canalOrigem\":\"APP\",\"dataSolicitacao\":\"2026-08-22T12:07:00-03:00\"}"
+```
+
+Exemplo usando `curl` no Linux/macOS ou Git Bash:
+
+```bash
+curl -X POST "http://localhost:8080/solicitacoes" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "clienteId": "cliente-123",
+    "valorSolicitado": 1000.00,
+    "canalOrigem": "APP",
+    "dataSolicitacao": "2026-08-22T12:02:34-03:00"
+  }'
+
+curl -X POST "http://localhost:8080/solicitacoes" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "clienteId": "cliente-456",
+    "valorSolicitado": 2000.00,
+    "canalOrigem": "APP",
+    "dataSolicitacao": "2026-08-22T12:04:10-03:00"
+  }'
+
+curl -X POST "http://localhost:8080/solicitacoes" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "clienteId": "cliente-789",
+    "valorSolicitado": 5000.00,
+    "canalOrigem": "APP",
+    "dataSolicitacao": "2026-08-22T12:07:00-03:00"
+  }'
+```
+
+No terminal do `servico-risco`, o log esperado será semelhante a:
+
+```text
+Fluxo de credito solicitado | janela=2026-08-22T12:00-03:00 | quantidade=1 | totalSolicitado=1000.00
+Fluxo de credito solicitado | janela=2026-08-22T12:00-03:00 | quantidade=2 | totalSolicitado=3000.00
+Fluxo de credito solicitado | janela=2026-08-22T12:05-03:00 | quantidade=1 | totalSolicitado=5000.00
+```
 
 ## Idempotência
 
