@@ -14,7 +14,9 @@ public class FluxoCreditoSolicitadoListener {
 
     private final FluxoCreditoSolicitadoService fluxoCreditoSolicitadoService;
 
-    @KafkaListener(topics = "${app.kafka.topico.credito-solicitado}", groupId = "risco-fluxo-creditos-v1")
+    @KafkaListener(
+            topics = "${app.kafka.topico.credito-solicitado}",
+            groupId = "${app.kafka.grupo.fluxo-credito}")
     public void receber(ConsumerRecord<String, CreditoSolicitadoEvent> registro, Acknowledgment confirmacao) {
         fluxoCreditoSolicitadoService.agregar(registro.value());
         confirmacao.acknowledge();

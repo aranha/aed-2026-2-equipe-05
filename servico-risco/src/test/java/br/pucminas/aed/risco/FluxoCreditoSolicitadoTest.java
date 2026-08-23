@@ -1,5 +1,7 @@
 package br.pucminas.aed.risco;
 
+import br.pucminas.aed.risco.service.AnaliseCreditoRepository;
+import br.pucminas.aed.risco.service.EventoProcessadoRepository;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -10,6 +12,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
@@ -41,6 +44,10 @@ class FluxoCreditoSolicitadoTest {
 
     @Value("${spring.embedded.kafka.brokers}")
     private String servidores;
+    @Autowired
+    private EventoProcessadoRepository eventoProcessadoRepository;
+    @Autowired
+    private AnaliseCreditoRepository analiseCreditoRepository;
     private KafkaProducer<String, String> publicador;
 
     @BeforeEach
@@ -69,6 +76,8 @@ class FluxoCreditoSolicitadoTest {
             assertThat(saida)
                     .contains("Fluxo de credito solicitado | janela=2026-08-22T12:00-03:00 | quantidade=2 | totalSolicitado=3000.00")
                     .contains("Fluxo de credito solicitado | janela=2026-08-22T12:05-03:00 | quantidade=1 | totalSolicitado=5000.00");
+            assertThat(eventoProcessadoRepository.contar()).isEqualTo(3);
+            assertThat(analiseCreditoRepository.contar()).isEqualTo(3);
         });
     }
 

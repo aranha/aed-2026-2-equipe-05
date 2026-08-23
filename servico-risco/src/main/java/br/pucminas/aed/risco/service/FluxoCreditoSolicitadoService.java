@@ -3,6 +3,7 @@ package br.pucminas.aed.risco.service;
 import br.pucminas.aed.risco.domain.CreditoSolicitadoEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -23,10 +24,16 @@ public class FluxoCreditoSolicitadoService {
      */
     private static final int TAMANHO_JANELA_MINUTOS = 5;
 
-    /*
-    ConcurrentMap faz a atualização de maneira mais segura quando, eventualmente, houver mais de uma thread consumindo mensagens.
-     */
     private final ConcurrentMap<OffsetDateTime, AcumuladoJanela> acumuladosPorJanela = new ConcurrentHashMap<>();
+    private final int maximoJanelasRetidas;
+
+    public FluxoCreditoSolicitadoService(
+            @Value("${app.fluxo-credito.maximo-janelas-retidas:288}") int maximoJanelasRetidas) {
+        if (maximoJanelasRetidas <= 0) {
+            throw new IllegalArgumentException("maximoJanelasRetidas deve ser positivo");
+        }
+        this.maximoJanelasRetidas = maximoJanelasRetidas;
+    }
 
     /**
      * Guarda na memória o acumulado para uma janela definida em minutos e exibe no ‘log’.
@@ -42,11 +49,14 @@ public class FluxoCreditoSolicitadoService {
                 return new AcumuladoJanela(evento.getValorSolicitado(), 1);
             }
 
-            return new AcumuladoJanela(atual.totalSolicitado().add(evento.getValorSolicitado()), atual.quantidadeSolicitacoes() + 1);
+            return new AcumuladoJanela(
+                    atual.totalSolicitado().add(evento.getValorSolicitado()),
+                    atual.quantidadeSolicitacoes() + 1);
         });
 
-        OffsetDateTime janelaHorarioLocal = janela.withOffsetSameInstant(OFFSET_BRASILIA);
-        log.info("Fluxo de credito solicitado | janela={} | quantidade={} | totalSolicitado={}", janelaHorarioLocal, acumulado.quantidadeSolicitacoes(), acumulado.totalSolicitado());
+        removerJanelasExcedentes();
+        log.info("Fluxo de credito solicitado | janela={} | quantidade={} | totalSolicitado={}",
+                janela, acumulado.quantidadeSolicitacoes(), acumulado.totalSolicitado());
     }
 
     /**
@@ -56,9 +66,23 @@ public class FluxoCreditoSolicitadoService {
      * Porque 53 dividido por 5 é igual a 10 (aqui o resto não importa). Logo a janela do exemplo acima é a do minuto 50 porque 10 X 5 = 50.
      */
     private OffsetDateTime alinharJanela(OffsetDateTime dataSolicitacao) {
-        int minutoAlinhado = (dataSolicitacao.getMinute() / TAMANHO_JANELA_MINUTOS) * TAMANHO_JANELA_MINUTOS;
+        OffsetDateTime horarioBrasilia = dataSolicitacao.withOffsetSameInstant(OFFSET_BRASILIA);
+        int minutoAlinhado =
+                (horarioBrasilia.getMinute() / TAMANHO_JANELA_MINUTOS) * TAMANHO_JANELA_MINUTOS;
 
-        return dataSolicitacao.withMinute(minutoAlinhado).withSecond(0).withNano(0);
+        return horarioBrasilia.withMinute(minutoAlinhado).withSecond(0).withNano(0);
+    }
+
+    private void removerJanelasExcedentes() {
+        int quantidadeExcedente = acumuladosPorJanela.size() - maximoJanelasRetidas;
+        if (quantidadeExcedente <= 0) {
+            return;
+        }
+
+        acumuladosPorJanela.keySet().stream()
+                .sorted()
+                .limit(quantidadeExcedente)
+                .forEach(acumuladosPorJanela::remove);
     }
 
     private record AcumuladoJanela(BigDecimal totalSolicitado, int quantidadeSolicitacoes) {

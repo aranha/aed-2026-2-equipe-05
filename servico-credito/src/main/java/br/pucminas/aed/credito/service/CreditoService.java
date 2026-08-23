@@ -35,7 +35,7 @@ public class CreditoService {
         validar(solicitacao);
         var dataSolicitacao = solicitacao.getDataSolicitacao() != null
                 ? solicitacao.getDataSolicitacao().withOffsetSameInstant(OFFSET_BRASILIA)
-                : OffsetDateTime.now();
+                : OffsetDateTime.now(OFFSET_BRASILIA);
         var evento = new CreditoSolicitadoEvent(
                 UUID.randomUUID().toString(), UUID.randomUUID().toString(), solicitacao.getClienteId(),
                 solicitacao.getValorSolicitado(), dataSolicitacao, solicitacao.getCanalOrigem());

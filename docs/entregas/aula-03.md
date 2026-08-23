@@ -1,6 +1,6 @@
 # Aula 03 - Agregação por janela de tempo
 
-Para rodar a alteração feita nesta aula, veja o `README.md` na seção 'Consumidor de fluxo por janela de tempo'. 
+Para rodar a alteração feita nesta aula, veja o `README.md` na seção 'Consumidor de fluxo por janela de tempo'.
 
 ## Qual pergunta de negócio a agregação responde?
 
@@ -16,9 +16,9 @@ Com isso, as janelas são alinhadas pelo horário do evento. Uma solicitação c
 
 ## O que acontece com um evento que chega atrasado?
 
-No desenho atual, um evento atrasado ainda entra na janela correspondente ao seu horário de ocorrência. Se um evento de `12:02` chegar quando o sistema já estiver processando eventos de `12:10`, ele atualiza a janela de `12:00`.
+No desenho atual, um evento atrasado ainda entra na janela correspondente ao seu horário de ocorrência enquanto essa janela estiver dentro do limite de retenção. Se um evento de `12:02` chegar quando o sistema já estiver processando eventos de `12:10`, ele atualiza a janela de `12:00`.
 
-Como a agregação é mantida em memória e o resultado é exibido em log, não existe fechamento definitivo de janela, watermark ou regra para descartar atraso. O log passa a mostrar o acumulado atualizado daquela janela quando o evento atrasado for processado.
+Como a agregação é mantida em memória e o resultado é exibido em log, não existe watermark. Para evitar crescimento ilimitado de memória, são mantidas por padrão as 288 janelas mais recentes. Um evento mais antigo do que essa retenção é processado e exibido no log, mas sua janela pode ser removida da memória quando o limite for reaplicado.
 
 ## Se o fluxo fosse reprocessado do começo amanhã, o resultado seria o mesmo?
 

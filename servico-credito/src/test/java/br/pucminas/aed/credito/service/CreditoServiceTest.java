@@ -12,6 +12,7 @@ import br.pucminas.aed.credito.domain.SolicitacaoCreditoVO;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.concurrent.CompletableFuture;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.jupiter.api.Test;
@@ -58,5 +59,20 @@ class CreditoServiceTest {
         String json = new CreditoConfig().objectMapperDosEventos().writeValueAsString(evento);
 
         assertThat(json).contains("\"dataSolicitacao\":\"2026-08-15T20:30:00-03:00\"");
+    }
+
+    @Test
+    void deveGerarDataSolicitacaoNoHorarioDeBrasiliaQuandoNaoInformada() {
+        KafkaTemplate<String, CreditoSolicitadoEvent> clienteDoBroker = mock(KafkaTemplate.class);
+        ResultadoPublicacaoService resultadoPublicacaoService = mock(ResultadoPublicacaoService.class);
+        when(clienteDoBroker.send(any(ProducerRecord.class)))
+                .thenReturn(new CompletableFuture<>());
+        var service = new CreditoService(clienteDoBroker, resultadoPublicacaoService,
+                "credito.solicitacao.solicitada.v1");
+
+        var evento = service.solicitar(new SolicitacaoCreditoVO(
+                "cli-001", new BigDecimal("15000.00"), "APP", null));
+
+        assertThat(evento.getDataSolicitacao().getOffset()).isEqualTo(ZoneOffset.of("-03:00"));
     }
 }
