@@ -27,3 +27,16 @@
 - Solicitei à IA a criação de um checklist com todos os itens que foram solicitados no documento disponibilizado com os requisitos para a entrega do que foi pedido para a aula 2.
 - A IA identificou os itens que faltavam e as correções e assim as fiz.
 - Como se trata de um checklist de requisitos exigidos para a entrega, foi aceito tudo que a IA fez nesse caso.
+
+## Aula 03
+
+### Registro da interação com IA
+
+#### 1. Interação usada para definir o desenho do novo consumidor de fluxo
+
+- Solicitei à IA uma sugestão de implementação para atender ao requisito de criar um novo consumidor no mesmo tópico Kafka, com grupo de consumidores próprio e agregação por janela de tempo.
+- A IA analisou o consumidor já existente no `servico-risco` e sugeriu manter o novo consumidor no mesmo serviço, usando o grupo `risco-fluxo-creditos-v1`, sem interferir no consumidor principal da análise de crédito.
+
+#### Recusa da sugestão da IA
+
+- A IA apresentou endpoint, tópico de saída, tabela ou log como possibilidades para tornar o resultado da agregação observável. Recusei a criação de endpoint, tópico de saída ou tabela nesta etapa, porque aumentaria o escopo da entrega. A equipe optou por observar o resultado no log do `servico-risco`, que atende ao requisito com menor complexidade.

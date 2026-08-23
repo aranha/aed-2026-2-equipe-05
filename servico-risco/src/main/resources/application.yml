@@ -27,5 +27,9 @@ spring:
       ack-mode: manual_immediate
 app:
   kafka:
+    grupo:
+      fluxo-credito: ${KAFKA_GRUPO_FLUXO_CREDITO:risco-fluxo-creditos-v1}
     topico:
       credito-solicitado: credito.solicitacao.solicitada.v1
+  fluxo-credito:
+    maximo-janelas-retidas: ${FLUXO_CREDITO_MAXIMO_JANELAS_RETIDAS:288}

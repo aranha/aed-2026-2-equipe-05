@@ -4,6 +4,7 @@ import br.pucminas.aed.credito.domain.CreditoSolicitadoEvent;
 import br.pucminas.aed.credito.domain.SolicitacaoCreditoVO;
 import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.UUID;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.header.internals.RecordHeader;
@@ -13,6 +14,9 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class CreditoService {
+
+    private static final ZoneOffset OFFSET_BRASILIA = ZoneOffset.of("-03:00");
+
     private static final String TIPO_EVENTO = "credito.solicitacao.solicitada.v1";
     private static final String FONTE_EVENTO = "/credito/solicitacoes";
     private final KafkaTemplate<String, CreditoSolicitadoEvent> clienteDoBroker;
@@ -29,17 +33,19 @@ public class CreditoService {
 
     public CreditoSolicitadoEvent solicitar(SolicitacaoCreditoVO solicitacao) {
         validar(solicitacao);
-        var agora = OffsetDateTime.now();
+        var dataSolicitacao = solicitacao.getDataSolicitacao() != null
+                ? solicitacao.getDataSolicitacao().withOffsetSameInstant(OFFSET_BRASILIA)
+                : OffsetDateTime.now(OFFSET_BRASILIA);
         var evento = new CreditoSolicitadoEvent(
                 UUID.randomUUID().toString(), UUID.randomUUID().toString(), solicitacao.getClienteId(),
-                solicitacao.getValorSolicitado(), agora, solicitacao.getCanalOrigem());
+                solicitacao.getValorSolicitado(), dataSolicitacao, solicitacao.getCanalOrigem());
         var registro = new ProducerRecord<String, CreditoSolicitadoEvent>(
                 topico, evento.getSolicitacaoId(), evento);
         adicionarCabecalho(registro, "ce_specversion", "1.0");
         adicionarCabecalho(registro, "ce_id", evento.getEventoId());
         adicionarCabecalho(registro, "ce_source", FONTE_EVENTO);
         adicionarCabecalho(registro, "ce_type", TIPO_EVENTO);
-        adicionarCabecalho(registro, "ce_time", agora.toString());
+        adicionarCabecalho(registro, "ce_time", dataSolicitacao.toString());
         clienteDoBroker.send(registro).whenComplete(
                 (resultado, falha) -> resultadoPublicacaoService.registrar(evento.getEventoId(), resultado, falha));
         return evento;
