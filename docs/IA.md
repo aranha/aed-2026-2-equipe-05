@@ -40,3 +40,23 @@
 #### Recusa da sugestão da IA
 
 - A IA apresentou endpoint, tópico de saída, tabela ou log como possibilidades para tornar o resultado da agregação observável. Recusei a criação de endpoint, tópico de saída ou tabela nesta etapa, porque aumentaria o escopo da entrega. A equipe optou por observar o resultado no log do `servico-risco`, que atende ao requisito com menor complexidade.
+
+## Aula 04
+
+### Registro da interação com IA
+
+#### 1. Interação usada para redigir o ADR-003 a partir do código existente
+
+- Solicitei à IA que analisasse o `servico-credito` e o `servico-risco` contra as Notas de Aula e o código de exemplo da disciplina e redigisse o rascunho do ADR-003 respondendo às quatro perguntas do slide da aula 04: menor unidade de ordem, dimensão pela qual o negócio pergunta, risco de partição quente e número de partições.
+- A IA identificou no `CreditoService` que a chave enviada é `solicitacaoId`, que o tópico nasce com três partições no `CreditoConfig` e que o agregador de fluxo não depende de nenhuma dimensão do evento. Nomeou a pergunta que a chave responde sem repartir e a que deixou de responder (agregação por cliente), e propôs o repartition topic como caminho caso essa pergunta vire prioridade.
+- Aceitei a estrutura e as justificativas, revisando o texto para manter a linguagem do domínio de crédito.
+
+#### 2. Interação usada para revisar o estado do repositório em relação ao que o professor pede
+
+- Solicitei à IA um levantamento do que faltava no repositório em relação aos enunciados e slides das aulas 02 a 05.
+- A IA apontou a ausência do ADR-003, da folha de rosto da aula 04 e da tag correspondente, além de itens da aula 05, e sugeriu a ordem de trabalho: ADR antes do código que ele justifica.
+
+#### Recusa da sugestão da IA
+
+- A IA sugeriu remover a possibilidade de o cliente informar `dataSolicitacao` na requisição HTTP, com o argumento de que o instante do fato deve ser afirmado pelo serviço que o produz, da mesma forma que o `eventoId`. A equipe recusou nesta etapa: o campo é opcional, o serviço assume o instante atual quando ele não vem, e informá-lo é o que permite exercitar janelas e retardatários na demonstração sem esperar o relógio. A consequência aceita é que um cliente pode datar o fato no passado ou no futuro, e isso ficará registrado como decisão quando o contrato de entrada for revisto.
+- A IA também propôs incluir nesta entrega uma alteração no `FluxoCreditoSolicitadoListener` para registrar partição, offset e chave no log, como no exemplo da disciplina. A equipe recusou incluir código na entrega da aula 04, que o professor definiu como três documentos, para não misturar a justificativa da chave com mudanças de comportamento do agregador.
