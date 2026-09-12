@@ -1,6 +1,13 @@
 spring:
   application:
     name: servico-credito
+  datasource:
+    url: ${BANCO_URL:jdbc:postgresql://localhost:15432/aed}
+    username: ${BANCO_USUARIO:aed}
+    password: ${BANCO_SENHA:aed}
+  sql:
+    init:
+      mode: always
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:19092}
     producer:
@@ -10,9 +17,23 @@ spring:
       properties:
         enable.idempotence: true
         spring.json.add.type.headers: false
+    consumer:
+      group-id: credito-reserva-limite-v1
+      enable-auto-commit: false
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: br.pucminas.aed.credito.domain
+        spring.json.use.type.headers: false
+        spring.json.value.default.type: br.pucminas.aed.credito.domain.ElegibilidadeAprovadaEvent
+    listener:
+      ack-mode: manual_immediate
 server:
   port: 8080
 app:
   kafka:
     topico:
       credito-solicitado: credito.solicitacao.solicitada.v1
+      elegibilidade-aprovada: credito.elegibilidade.aprovada.v1
+      limite-reservado: credito.limite.reservado.v1

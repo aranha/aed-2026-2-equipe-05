@@ -1,6 +1,7 @@
 package br.pucminas.aed.credito;
 
 import br.pucminas.aed.credito.domain.CreditoSolicitadoEvent;
+import br.pucminas.aed.credito.domain.LimiteDeCreditoReservadoEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
@@ -27,6 +28,18 @@ public class CreditoConfig {
     }
 
     @Bean
+    public NewTopic topicoDeElegibilidadeAprovada(
+            @Value("${app.kafka.topico.elegibilidade-aprovada}") String topico) {
+        return new NewTopic(topico, 3, (short) 1);
+    }
+
+    @Bean
+    public NewTopic topicoDeLimiteReservado(
+            @Value("${app.kafka.topico.limite-reservado}") String topico) {
+        return new NewTopic(topico, 3, (short) 1);
+    }
+
+    @Bean
     public ObjectMapper objectMapperDosEventos() {
         return JsonMapper.builder()
                 .addModule(new JavaTimeModule())
@@ -37,13 +50,23 @@ public class CreditoConfig {
     @Bean
     public KafkaTemplate<String, CreditoSolicitadoEvent> clienteDoBroker(
             KafkaProperties propriedades, ObjectMapper objectMapperDosEventos) {
-        var serializadorDoValor = new JsonSerializer<CreditoSolicitadoEvent>(objectMapperDosEventos);
+        return criarKafkaTemplate(propriedades, objectMapperDosEventos);
+    }
+
+    @Bean
+    public KafkaTemplate<String, LimiteDeCreditoReservadoEvent> clienteDoBrokerLimiteReservado(
+            KafkaProperties propriedades, ObjectMapper objectMapperDosEventos) {
+        return criarKafkaTemplate(propriedades, objectMapperDosEventos);
+    }
+
+    private <T> KafkaTemplate<String, T> criarKafkaTemplate(
+            KafkaProperties propriedades, ObjectMapper objectMapperDosEventos) {
+        var serializadorDoValor = new JsonSerializer<T>(objectMapperDosEventos);
         Map<String, Object> configuracao = propriedades.buildProducerProperties(null);
         configuracao.remove(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG);
         configuracao.remove(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG);
-        ProducerFactory<String, CreditoSolicitadoEvent> fabrica =
-                new DefaultKafkaProducerFactory<>(
-                        configuracao, new StringSerializer(), serializadorDoValor);
+        ProducerFactory<String, T> fabrica = new DefaultKafkaProducerFactory<>(
+                configuracao, new StringSerializer(), serializadorDoValor);
         return new KafkaTemplate<>(fabrica);
     }
 }
