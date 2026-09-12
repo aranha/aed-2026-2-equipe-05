@@ -1,6 +1,13 @@
 # Aula 03 - Agregação por janela de tempo
 
-Para rodar a alteração feita nesta aula, veja o `README.md` na seção 'Consumidor de fluxo por janela de tempo'.
+## Por onde começar a leitura
+
+1. [README do projeto](../../README.md), seção "Consumidor de fluxo por janela de tempo": como subir o ambiente e reproduzir a agregação com exemplos de `curl`.
+2. [contrato.md](../contrato.md): o evento `credito.solicitacao.solicitada.v1` consumido pelo agregador, e a regra de compatibilidade FULL que permite os dois grupos de consumo lerem o mesmo tópico.
+3. [FluxoCreditoSolicitadoListener](../../servico-risco/src/main/java/br/pucminas/aed/risco/controller/FluxoCreditoSolicitadoListener.java): consumidor com grupo próprio (`risco-fluxo-creditos-v1`), separado do consumidor de análise de crédito.
+4. [FluxoCreditoSolicitadoService](../../servico-risco/src/main/java/br/pucminas/aed/risco/service/FluxoCreditoSolicitadoService.java): alinhamento da janela de 5 minutos pelo relógio de ocorrência (`dataSolicitacao`) e acumulação em memória.
+5. [FluxoCreditoSolicitadoServiceTest](../../servico-risco/src/test/java/br/pucminas/aed/risco/service/FluxoCreditoSolicitadoServiceTest.java) e [FluxoCreditoSolicitadoTest](../../servico-risco/src/test/java/br/pucminas/aed/risco/FluxoCreditoSolicitadoTest.java): cobertura da normalização de janelas.
+6. As perguntas de negócio respondidas abaixo: o que a agregação mede, por que o relógio de ocorrência foi escolhido, o que acontece com retardatários e o que muda num reprocessamento.
 
 ## Qual pergunta de negócio a agregação responde?
 
