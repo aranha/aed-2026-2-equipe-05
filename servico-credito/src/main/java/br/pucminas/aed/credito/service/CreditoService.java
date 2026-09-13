@@ -8,6 +8,7 @@ import java.time.ZoneOffset;
 import java.util.UUID;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.header.internals.RecordHeader;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
@@ -23,9 +24,10 @@ public class CreditoService {
     private final ResultadoPublicacaoService resultadoPublicacaoService;
     private final String topico;
 
-    public CreditoService(KafkaTemplate<String, CreditoSolicitadoEvent> clienteDoBroker,
-                          ResultadoPublicacaoService resultadoPublicacaoService,
-                          @Value("${app.kafka.topico.credito-solicitado}") String topico) {
+    public CreditoService(
+            @Qualifier("clienteDoBroker") KafkaTemplate<String, CreditoSolicitadoEvent> clienteDoBroker,
+            ResultadoPublicacaoService resultadoPublicacaoService,
+            @Value("${app.kafka.topico.credito-solicitado}") String topico) {
         this.clienteDoBroker = clienteDoBroker;
         this.resultadoPublicacaoService = resultadoPublicacaoService;
         this.topico = topico;

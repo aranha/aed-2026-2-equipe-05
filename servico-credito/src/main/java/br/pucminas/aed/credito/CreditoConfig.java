@@ -1,21 +1,29 @@
 package br.pucminas.aed.credito;
 
 import br.pucminas.aed.credito.domain.CreditoSolicitadoEvent;
+import br.pucminas.aed.credito.domain.LimiteDeCreditoReservadoEvent;
+import br.pucminas.aed.credito.domain.ReservaDeLimiteCanceladaEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import java.util.Map;
 import org.apache.kafka.clients.admin.NewTopic;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.kafka.KafkaProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
+import org.springframework.kafka.core.ConsumerFactory;
+import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.core.ProducerFactory;
+import org.springframework.kafka.listener.ContainerProperties;
 import org.springframework.kafka.support.serializer.JsonSerializer;
 
 @Configuration
@@ -23,6 +31,36 @@ public class CreditoConfig {
     @Bean
     public NewTopic topicoDeCreditoSolicitado(
             @Value("${app.kafka.topico.credito-solicitado}") String topico) {
+        return new NewTopic(topico, 3, (short) 1);
+    }
+
+    @Bean
+    public NewTopic topicoDeElegibilidadeAprovada(
+            @Value("${app.kafka.topico.elegibilidade-aprovada}") String topico) {
+        return new NewTopic(topico, 3, (short) 1);
+    }
+
+    @Bean
+    public NewTopic topicoDeLimiteReservado(
+            @Value("${app.kafka.topico.limite-reservado}") String topico) {
+        return new NewTopic(topico, 3, (short) 1);
+    }
+
+    @Bean
+    public NewTopic topicoDePropostaRecusada(
+            @Value("${app.kafka.topico.proposta-recusada}") String topico) {
+        return new NewTopic(topico, 3, (short) 1);
+    }
+
+    @Bean
+    public NewTopic topicoDePropostaExpirada(
+            @Value("${app.kafka.topico.proposta-expirada}") String topico) {
+        return new NewTopic(topico, 3, (short) 1);
+    }
+
+    @Bean
+    public NewTopic topicoDeReservaCancelada(
+            @Value("${app.kafka.topico.reserva-cancelada}") String topico) {
         return new NewTopic(topico, 3, (short) 1);
     }
 
@@ -37,13 +75,45 @@ public class CreditoConfig {
     @Bean
     public KafkaTemplate<String, CreditoSolicitadoEvent> clienteDoBroker(
             KafkaProperties propriedades, ObjectMapper objectMapperDosEventos) {
-        var serializadorDoValor = new JsonSerializer<CreditoSolicitadoEvent>(objectMapperDosEventos);
+        return criarKafkaTemplate(propriedades, objectMapperDosEventos);
+    }
+
+    @Bean
+    public KafkaTemplate<String, LimiteDeCreditoReservadoEvent> clienteDoBrokerLimiteReservado(
+            KafkaProperties propriedades, ObjectMapper objectMapperDosEventos) {
+        return criarKafkaTemplate(propriedades, objectMapperDosEventos);
+    }
+
+    @Bean
+    public KafkaTemplate<String, ReservaDeLimiteCanceladaEvent> clienteDoBrokerReservaCancelada(
+            KafkaProperties propriedades, ObjectMapper objectMapperDosEventos) {
+        return criarKafkaTemplate(propriedades, objectMapperDosEventos);
+    }
+
+    @Bean(name = "clienteDeCompensacaoKafkaListenerContainerFactory")
+    public ConcurrentKafkaListenerContainerFactory<String, String>
+            clienteDeCompensacaoKafkaListenerContainerFactory(KafkaProperties propriedades) {
+        Map<String, Object> configuracao = propriedades.buildConsumerProperties(null);
+        configuracao.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+        configuracao.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+        configuracao.remove("spring.json.value.default.type");
+
+        ConsumerFactory<String, String> fabrica = new DefaultKafkaConsumerFactory<>(
+                configuracao, new StringDeserializer(), new StringDeserializer());
+        var container = new ConcurrentKafkaListenerContainerFactory<String, String>();
+        container.setConsumerFactory(fabrica);
+        container.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
+        return container;
+    }
+
+    private <T> KafkaTemplate<String, T> criarKafkaTemplate(
+            KafkaProperties propriedades, ObjectMapper objectMapperDosEventos) {
+        var serializadorDoValor = new JsonSerializer<T>(objectMapperDosEventos);
         Map<String, Object> configuracao = propriedades.buildProducerProperties(null);
         configuracao.remove(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG);
         configuracao.remove(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG);
-        ProducerFactory<String, CreditoSolicitadoEvent> fabrica =
-                new DefaultKafkaProducerFactory<>(
-                        configuracao, new StringSerializer(), serializadorDoValor);
+        ProducerFactory<String, T> fabrica = new DefaultKafkaProducerFactory<>(
+                configuracao, new StringSerializer(), serializadorDoValor);
         return new KafkaTemplate<>(fabrica);
     }
 }
