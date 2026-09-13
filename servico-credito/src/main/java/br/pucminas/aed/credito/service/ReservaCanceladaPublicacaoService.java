@@ -36,9 +36,14 @@ public class ReservaCanceladaPublicacaoService {
         adicionarCabecalho(registro, "ce_source", FONTE_EVENTO);
         adicionarCabecalho(registro, "ce_type", TIPO_EVENTO);
         adicionarCabecalho(registro, "ce_time", evento.getDataCancelamento().toString());
-        clienteDoBroker.send(registro).whenComplete(
-                (resultado, falha) -> resultadoPublicacaoService.registrar(
-                        evento.getEventoId(), resultado, falha));
+
+        try {
+            var resultado = clienteDoBroker.send(registro).join();
+            resultadoPublicacaoService.registrar(evento.getEventoId(), resultado, null);
+        } catch (RuntimeException falha) {
+            resultadoPublicacaoService.registrar(evento.getEventoId(), null, falha);
+            throw falha;
+        }
     }
 
     private void adicionarCabecalho(ProducerRecord<String, ReservaDeLimiteCanceladaEvent> registro,

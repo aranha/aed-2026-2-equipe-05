@@ -2,7 +2,13 @@ package br.pucminas.aed.credito;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
 
+import br.pucminas.aed.credito.domain.ReservaDeLimiteCanceladaEvent;
+import br.pucminas.aed.credito.service.ReservaCanceladaPublicacaoService;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.OffsetDateTime;
@@ -23,6 +29,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.test.context.EmbeddedKafka;
 import org.springframework.test.annotation.DirtiesContext;
@@ -54,6 +61,9 @@ class CompensacaoReservaIntegracaoTest {
 
     @Autowired private JdbcTemplate bancoDeDados;
     @Value("${spring.embedded.kafka.brokers}") private String servidores;
+
+    @SpyBean
+    private ReservaCanceladaPublicacaoService reservaCanceladaPublicacaoService;
 
     private KafkaProducer<String, String> publicador;
     private KafkaConsumer<String, String> consumidor;
@@ -101,9 +111,10 @@ class CompensacaoReservaIntegracaoTest {
 
     @Test
     void devolveLimiteEPublicaCancelamentoQuandoPropostaERecusada() {
+        String eventoOrigemId = "evt-recusa-001";
         assertThat(limiteDisponivel()).isEqualByComparingTo("7000.00");
 
-        publicarPropostaRecusada("evt-recusa-001", "sol-001");
+        publicarPropostaRecusada(eventoOrigemId, "sol-001");
         publicador.flush();
 
         Awaitility.await().atMost(PRAZO).untilAsserted(() -> {
@@ -111,7 +122,7 @@ class CompensacaoReservaIntegracaoTest {
             assertThat(motivoDoCancelamento("sol-001")).isEqualTo("PROPOSTA_RECUSADA");
         });
 
-        var eventoPublicado = aguardarEventoDeCancelamento();
+        var eventoPublicado = aguardarEventoDeCancelamento(eventoOrigemId);
         assertThat(eventoPublicado.key()).isEqualTo("sol-001");
         assertThat(eventoPublicado.value())
                 .contains("\"eventoOrigemId\":\"evt-recusa-001\"")
@@ -126,7 +137,8 @@ class CompensacaoReservaIntegracaoTest {
 
     @Test
     void devolveLimiteEPublicaCancelamentoQuandoPropostaExpira() {
-        publicarPropostaExpirada("evt-expiracao-001", "sol-001");
+        String eventoOrigemId = "evt-expiracao-001";
+        publicarPropostaExpirada(eventoOrigemId, "sol-001");
         publicador.flush();
 
         Awaitility.await().atMost(PRAZO).untilAsserted(() -> {
@@ -134,10 +146,65 @@ class CompensacaoReservaIntegracaoTest {
             assertThat(motivoDoCancelamento("sol-001")).isEqualTo("PROPOSTA_EXPIRADA");
         });
 
-        var eventoPublicado = aguardarEventoDeCancelamento();
+        var eventoPublicado = aguardarEventoDeCancelamento(eventoOrigemId);
         assertThat(eventoPublicado.value())
                 .contains("\"eventoOrigemId\":\"evt-expiracao-001\"")
                 .contains("\"motivo\":\"PROPOSTA_EXPIRADA\"");
+    }
+
+    @Test
+    void mesmoEventoPodeSerReexecutadoSemDevolverLimiteDuasVezes() {
+        String eventoOrigemId = "evt-recusa-idempotente-001";
+
+        publicarPropostaRecusada(eventoOrigemId, "sol-001");
+        publicador.flush();
+
+        Awaitility.await().atMost(PRAZO).untilAsserted(() -> {
+            assertThat(limiteDisponivel()).isEqualByComparingTo("10000.00");
+            assertThat(quantidadeCancelamentos(eventoOrigemId)).isEqualTo(1);
+        });
+
+        var primeiraPublicacao = aguardarEventoDeCancelamento(eventoOrigemId);
+        String eventoCancelamentoId = eventoCancelamentoId(eventoOrigemId);
+        assertThat(new String(primeiraPublicacao.headers().lastHeader("ce_id").value(), UTF_8))
+                .isEqualTo(eventoCancelamentoId);
+
+        publicarPropostaRecusada(eventoOrigemId, "sol-001");
+        publicador.flush();
+
+        var segundaPublicacao = aguardarEventoDeCancelamento(eventoOrigemId);
+        Awaitility.await().atMost(PRAZO).untilAsserted(() -> {
+            assertThat(limiteDisponivel()).isEqualByComparingTo("10000.00");
+            assertThat(quantidadeCancelamentos(eventoOrigemId)).isEqualTo(1);
+        });
+
+        assertThat(new String(segundaPublicacao.headers().lastHeader("ce_id").value(), UTF_8))
+                .isEqualTo(eventoCancelamentoId);
+    }
+
+    @Test
+    void reexecutaMesmoEventoQuandoAPublicacaoFalhaAposACompensacao() {
+        String eventoOrigemId = "evt-recusa-retry-001";
+
+        doThrow(new IllegalStateException("falha simulada ao publicar compensacao"))
+                .doCallRealMethod()
+                .when(reservaCanceladaPublicacaoService)
+                .publicar(any(ReservaDeLimiteCanceladaEvent.class));
+
+        publicarPropostaRecusada(eventoOrigemId, "sol-001");
+        publicador.flush();
+
+        Awaitility.await().atMost(PRAZO).untilAsserted(() -> {
+            verify(reservaCanceladaPublicacaoService, atLeast(2))
+                    .publicar(any(ReservaDeLimiteCanceladaEvent.class));
+            assertThat(limiteDisponivel()).isEqualByComparingTo("10000.00");
+            assertThat(quantidadeCancelamentos(eventoOrigemId)).isEqualTo(1);
+        });
+
+        var eventoPublicado = aguardarEventoDeCancelamento(eventoOrigemId);
+        String eventoCancelamentoId = eventoCancelamentoId(eventoOrigemId);
+        assertThat(new String(eventoPublicado.headers().lastHeader("ce_id").value(), UTF_8))
+                .isEqualTo(eventoCancelamentoId);
     }
 
     private void publicarPropostaRecusada(String eventoId, String solicitacaoId) {
@@ -175,17 +242,21 @@ class CompensacaoReservaIntegracaoTest {
     }
 
     private org.apache.kafka.clients.consumer.ConsumerRecord<String, String>
-            aguardarEventoDeCancelamento() {
+            aguardarEventoDeCancelamento(String eventoOrigemId) {
         long limite = System.nanoTime() + PRAZO.toNanos();
+        String trechoEsperado = "\"eventoOrigemId\":\"" + eventoOrigemId + "\"";
         while (System.nanoTime() < limite) {
             var registros = consumidor.poll(Duration.ofMillis(500));
             for (var registro : registros) {
-                if (TOPICO_SAIDA.equals(registro.topic()) && "sol-001".equals(registro.key())) {
+                if (TOPICO_SAIDA.equals(registro.topic())
+                        && "sol-001".equals(registro.key())
+                        && registro.value().contains(trechoEsperado)) {
                     return registro;
                 }
             }
         }
-        throw new AssertionError("evento ReservaDeLimiteCancelada nao foi publicado");
+        throw new AssertionError(
+                "evento ReservaDeLimiteCancelada nao foi publicado para " + eventoOrigemId);
     }
 
     private BigDecimal limiteDisponivel() {
@@ -198,5 +269,17 @@ class CompensacaoReservaIntegracaoTest {
         return bancoDeDados.queryForObject(
                 "select motivo from cancelamento_reserva where solicitacao_id = ?",
                 String.class, solicitacaoId);
+    }
+
+    private Integer quantidadeCancelamentos(String eventoOrigemId) {
+        return bancoDeDados.queryForObject(
+                "select count(*) from cancelamento_reserva where evento_origem_id = ?",
+                Integer.class, eventoOrigemId);
+    }
+
+    private String eventoCancelamentoId(String eventoOrigemId) {
+        return bancoDeDados.queryForObject(
+                "select evento_cancelamento_id from cancelamento_reserva where evento_origem_id = ?",
+                String.class, eventoOrigemId);
     }
 }
