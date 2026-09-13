@@ -21,6 +21,13 @@ public class CompensacaoReservaService {
     public ReservaDeLimiteCanceladaEvent cancelar(String eventoOrigemId,
                                                    String solicitacaoId,
                                                    String motivo) {
+        var cancelamentoExistente = cancelamentoReservaRepository
+                .buscarPorEventoOrigemId(eventoOrigemId);
+
+        if (cancelamentoExistente.isPresent()) {
+            return cancelamentoExistente.get();
+        }
+
         var reserva = reservaLimiteRepository.buscarPorSolicitacaoId(solicitacaoId)
                 .orElseThrow(() -> new IllegalStateException(
                         "reserva de limite nao encontrada para a solicitacao " + solicitacaoId));
