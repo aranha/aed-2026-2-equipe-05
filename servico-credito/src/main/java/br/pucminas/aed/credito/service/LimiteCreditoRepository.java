@@ -24,6 +24,17 @@ public class LimiteCreditoRepository {
         return linhas == 1;
     }
 
+    public boolean devolver(String clienteId, BigDecimal valor, OffsetDateTime atualizadoEm) {
+        int linhas = bancoDeDados.update("""
+                update limite_credito
+                   set limite_disponivel = limite_disponivel + ?,
+                       atualizado_em = ?
+                 where cliente_id = ?
+                   and limite_disponivel + ? <= limite_total
+                """, valor, atualizadoEm, clienteId, valor);
+        return linhas == 1;
+    }
+
     public Optional<BigDecimal> consultarLimiteDisponivel(String clienteId) {
         List<BigDecimal> resultados = bancoDeDados.query(
                 "select limite_disponivel from limite_credito where cliente_id = ?",

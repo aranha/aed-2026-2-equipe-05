@@ -20,3 +20,16 @@ create table if not exists reserva_limite (
     cancelada_em timestamp with time zone null,
     foreign key (cliente_id) references limite_credito(cliente_id)
 );
+
+create table if not exists cancelamento_reserva (
+    evento_origem_id varchar(64) primary key,
+    evento_cancelamento_id varchar(64) not null unique,
+    solicitacao_id varchar(36) not null unique,
+    cliente_id varchar(80) not null,
+    valor_devolvido decimal(19, 2) not null,
+    limite_disponivel_apos decimal(19, 2) not null,
+    motivo varchar(30) not null,
+    cancelada_em timestamp with time zone not null,
+    foreign key (solicitacao_id) references reserva_limite(solicitacao_id),
+    foreign key (cliente_id) references limite_credito(cliente_id)
+);

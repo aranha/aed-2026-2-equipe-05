@@ -37,3 +37,8 @@ app:
       credito-solicitado: credito.solicitacao.solicitada.v1
       elegibilidade-aprovada: credito.elegibilidade.aprovada.v1
       limite-reservado: credito.limite.reservado.v1
+      proposta-recusada: credito.proposta.recusada.v1
+      proposta-expirada: credito.proposta.expirada.v1
+      reserva-cancelada: credito.reserva-limite.cancelada.v1
+    grupo:
+      compensacao-reserva: credito-compensacao-reserva-v1
