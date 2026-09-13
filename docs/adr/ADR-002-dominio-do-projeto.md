@@ -23,6 +23,18 @@ O processo inicia quando o cliente solicita um empréstimo (gatilho: CréditoSol
   - Algo que valha reprocessar: A projeção do histórico e do estado atual das solicitações de crédito.
     Justificativa: A visão de acompanhamento e auditoria pode ser reconstruída a partir de eventos como CréditoSolicitado, ElegibilidadeAprovada, PropostaDeCreditoAceita, ContratoAssinado e CréditoLiberado. Esse reprocessamento permite corrigir uma projeção ou criar uma nova consulta sem repetir desembolsos nem chamar novamente os sistemas externos.
 
+## Granularidade dos eventos e chave de deduplicação
+
+- **Por que `ElegibilidadeAprovada` e `PropostaDeCreditoAceita` são fatos separados, e não estados de um mesmo agregado.**
+  Entre os dois existe um sistema externo (cálculo de condições e apresentação da proposta) e uma decisão do cliente que pode nunca acontecer — a proposta pode ser recusada ou expirar sem que o cliente responda. Colapsar os dois num único evento exigiria publicá-lo antes do desfecho real, ou reescrevê-lo depois, o que viola a regra de que evento é fato imutável. Separar os dois também isola o efeito colateral que só existe entre eles: a reserva de limite. `ElegibilidadeAprovada` não reserva nada; é `LimiteDeCreditoReservado` que produz o efeito reversível, e ele só faz sentido como evento próprio porque é exatamente o que a compensação (`ReservaDeLimiteCancelada`) desfaz. Se granularidade maior fosse escolhida, a compensação teria que adivinhar qual parte de um evento composto desfazer.
+
+  A mesma lógica se aplica a `PropostaDeCreditoRecusada` e `PropostaDeCreditoExpirada`: são gatilhos diferentes (decisão explícita do cliente vs. decurso de prazo) que levam à mesma reação (cancelar a reserva), e nomeá-los separadamente preserva o motivo original na auditoria — sem isso, seria impossível reconstruir depois se o cliente recusou ou simplesmente não respondeu.
+
+- **Por que a chave de deduplicação é o `eventoId`, e não o `solicitacaoId`.**
+  `solicitacaoId` identifica a solicitação de crédito como um todo e se repete em todos os eventos do mesmo fluxo (é inclusive a chave de partição no Kafka). Usá-lo como chave de dedup faria o segundo evento legítimo do mesmo fluxo — por exemplo, `LimiteDeCreditoReservado` chegando depois de `CréditoSolicitado` — ser descartado por engano, porque ambos compartilham o `solicitacaoId`. O `eventoId` identifica a ocorrência específica de publicação e é isso que reentrega de broker duplica; deduplicar por ele garante efeito único por fato publicado, sem esconder fatos legítimos e diferentes da mesma solicitação.
+
+  O risco concreto que essa escolha evita é o **duplo desembolso**: se o Core Bancário reentregar ou o produtor retentar a publicação do evento que dispara a liberação do crédito, deduplicar pelo `eventoId` garante que o efeito financeiro (crédito liberado, limite reservado, reserva cancelada) aconteça exatamente uma vez por fato, mesmo sob reentrega. Essa é a mesma chave já usada hoje pelo `servico-risco` na análise de crédito (`EventoProcessadoRepository`, chave `ce_id`), e o padrão se estende a todos os eventos financeiramente sensíveis da saga.
+
 ## Alternativas consideradas
 - **Mercado Rápido — ledger de pagamentos:** recusado porque a equipe não possui experiência real compartilhada suficiente sobre conciliação e estornos desse processo; escolher esse recorte exigiria pressupor regras essenciais.
 - **Mercado Rápido — avaliação e reputação:** recusado porque, no recorte discutido, a compensação de uma avaliação já utilizada no cálculo de reputação não ficou claramente definida.

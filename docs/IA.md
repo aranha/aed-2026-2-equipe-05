@@ -24,6 +24,7 @@
 - A IA gerou uma resposta excessivamente detalhada sobre a avaliação crítica de trade-offs do domínio escolhido pela equipe. Optei por refinar o texto de forma mais concisa e direta aos pontos essenciais, priorizando o foco nos desafios reais que são relevantes para o projeto.
 
 #### 3. Interação usada para revisar o que faltava para a entrega do que foi solicitado para a aula 2:
+
 - Solicitei à IA a criação de um checklist com todos os itens que foram solicitados no documento disponibilizado com os requisitos para a entrega do que foi pedido para a aula 2.
 - A IA identificou os itens que faltavam e as correções e assim as fiz.
 - Como se trata de um checklist de requisitos exigidos para a entrega, foi aceito tudo que a IA fez nesse caso.
@@ -40,3 +41,16 @@
 #### Recusa da sugestão da IA
 
 - A IA apresentou endpoint, tópico de saída, tabela ou log como possibilidades para tornar o resultado da agregação observável. Recusei a criação de endpoint, tópico de saída ou tabela nesta etapa, porque aumentaria o escopo da entrega. A equipe optou por observar o resultado no log do `servico-risco`, que atende ao requisito com menor complexidade.
+
+## Etapa final — projeto final (Parte D)
+
+### Registro da interação com IA
+
+#### 1. Interação usada para redigir `docs/arquitetura.md`, a extensão da ADR-002 e as seções organizacionais de `contrato.md` e `aula-03.md`
+
+- Pedi à IA para ler o repositório inteiro (código, docs, histórico de commits) e o documento de devolutiva do professor, e me situar sobre o que já existe e o que falta para a minha parte (Parte D) do projeto final.
+- A partir disso, a IA montou o esqueleto do `docs/arquitetura.md` com as oito seções cobradas na rubrica, cruzando o conteúdo já existente em `ADR-002` e `contrato.md`, e redigiu a justificativa de granularidade dos eventos e da chave de deduplicação que faltava na `ADR-002`.
+
+#### Recusa da sugestão da IA
+
+- Para não deixar a seção de "consequências aceitas" do `arquitetura.md` com um `TODO` vazio, a IA sugeriu preencher com um número placeholder de tentativas de retentativa contra o Core Bancário (ex.: "3 tentativas com backoff exponencial"). Recusei essa sugestão: quantas tentativas e por quê é exatamente a decisão que a rubrica atribui à `ADR-006`, de responsabilidade do Hugo. Preencher esse número agora, mesmo como placeholder, tiraria dele a autoria de uma decisão que é parte da nota individual dele, e criaria risco de o documento ficar inconsistente com o que ele decidir de fato. Mantive a seção como `TODO`, apontando explicitamente para a `ADR-006`.

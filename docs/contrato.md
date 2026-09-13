@@ -45,6 +45,14 @@ Essa regra permite implantar produtores e os dois grupos de consumidores em qual
 
 Por exemplo, alterar `valorSolicitado` para incluir juros ou tarifas seria uma mudança incompatível de significado, mesmo que o campo continuasse sendo decimal. Nesse caso, seria necessário publicar uma nova versão do tipo do evento e manter a transição compatível entre produtores e consumidores.
 
+## Contexto organizacional da regra de compatibilidade
+
+A regra FULL não é uma escolha isolada de formato de dado — ela existe porque o `servico-credito` e o `servico-risco` são times/deploys diferentes dentro do mesmo repositório, cada um com seu próprio pipeline de build e ciclo de release.
+
+- **Quantos consumidores dependem deste evento hoje:** dois grupos de consumo distintos no `servico-risco` — o consumidor de análise de crédito (grupo padrão) e o consumidor de fluxo por janela de tempo (`risco-fluxo-creditos-v1`). Ambos leem o mesmo tópico `credito.solicitacao.solicitada.v1` a partir do mesmo produtor.
+- **Quem controla o deploy de cada lado:** o `servico-credito` publica o evento e pode ser implantado de forma independente do `servico-risco`; não existe um gate de deploy compartilhado nem uma janela coordenada entre os dois serviços. Como cada serviço tem seu próprio `pom.xml`, artefato `.jar` e ciclo de subida (ver `README.md`), qualquer um dos dois pode subir uma versão nova sem avisar o outro.
+- **Por que isso exige FULL, e não FORWARD ou BACKWARD isoladamente:** sem um mecanismo de coordenação de deploy, a ordem de subida entre produtor e os dois grupos de consumidores é imprevisível — um consumidor pode ser reiniciado antes do produtor, ou depois, e um novo consumidor pode subir enquanto um consumidor antigo do outro grupo ainda está rodando. FULL é a única regra que garante leitura correta em qualquer uma dessas combinações, porque não assume qual lado sobe primeiro.
+
 ## Exemplo de carga
 
 Todos os valores abaixo são fictícios:
