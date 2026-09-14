@@ -12,13 +12,18 @@ spring:
       mode: always
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:19092}
+    producer:
+      acks: all
+      properties:
+        enable.idempotence: true
     consumer:
       group-id: risco-credito-v1
       enable-auto-commit: false
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
       properties:
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
         spring.json.trusted.packages: br.pucminas.aed.risco.domain
         spring.json.use.type.headers: false
         spring.json.value.default.type: br.pucminas.aed.risco.domain.CreditoSolicitadoEvent
@@ -31,5 +36,14 @@ app:
       fluxo-credito: ${KAFKA_GRUPO_FLUXO_CREDITO:risco-fluxo-creditos-v1}
     topico:
       credito-solicitado: credito.solicitacao.solicitada.v1
+      sufixo-dlq: ${KAFKA_SUFIXO_DLQ:.dlq}
+    retentativa:
+      # A retentativa e bloqueante na particao: tentativas x intervalo-maximo-ms precisa
+      # ficar folgadamente abaixo de max.poll.interval.ms (5 min) para nao derrubar o
+      # consumidor do grupo. Com os valores abaixo o pior caso e 7,5s.
+      tentativas: ${RETENTATIVA_TENTATIVAS:4}
+      intervalo-inicial-ms: ${RETENTATIVA_INTERVALO_INICIAL_MS:500}
+      multiplicador: ${RETENTATIVA_MULTIPLICADOR:2.0}
+      intervalo-maximo-ms: ${RETENTATIVA_INTERVALO_MAXIMO_MS:5000}
   fluxo-credito:
     maximo-janelas-retidas: ${FLUXO_CREDITO_MAXIMO_JANELAS_RETIDAS:288}
