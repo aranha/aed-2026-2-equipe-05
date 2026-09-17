@@ -29,6 +29,6 @@ Como a agregação é mantida em memória e o resultado é exibido em log, não 
 
 ## Se o fluxo fosse reprocessado do começo amanhã, o resultado seria o mesmo?
 
-Se o mesmo conjunto de eventos fosse reprocessado do começo, uma vez, com o estado em memória vazio, os totais finais por janela seriam os mesmos, porque a agregação usa o horário de ocorrência (`dataSolicitacao`) e os valores do próprio evento.
+Sim. Se o mesmo conjunto de eventos fosse reprocessado do começo, com o estado em memória vazio, os totais finais por janela seriam os mesmos, porque a agregação usa o horário de ocorrência (`dataSolicitacao`) e os valores do próprio evento.
 
-O desenho atual, porém, não persiste o resultado da agregação e também não faz deduplicação específica nesse consumidor de fluxo. Portanto, se houver eventos duplicados no tópico ou se o mesmo fluxo for reprocessado por cima de um estado já acumulado, os valores podem ser contados novamente. Para esta etapa isso é aceitável, porque o objetivo escolhido foi observar o fluxo por log de forma simples, sem transformar a agregação em uma projeção persistida ou exatamente uma vez.
+Além disso, o agregador agora é idempotente por `eventoId`: antes de somar uma solicitação na janela, ele verifica se aquele evento já foi processado por esse fluxo. Assim, uma reentrega do Kafka com o mesmo `eventoId` não incrementa novamente a quantidade nem o `totalSolicitado`. O resultado da agregação continua sendo mantido em memória e exibido em log, mas duplicatas do mesmo evento deixam de distorcer os números da janela.
