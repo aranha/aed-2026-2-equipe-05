@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -27,6 +28,8 @@ public class FluxoCreditoSolicitadoService {
     private final ConcurrentMap<OffsetDateTime, AcumuladoJanela> acumuladosPorJanela = new ConcurrentHashMap<>();
     private final int maximoJanelasRetidas;
 
+    private final Set<String> eventosAgregados = ConcurrentHashMap.newKeySet();
+
     public FluxoCreditoSolicitadoService(
             @Value("${app.fluxo-credito.maximo-janelas-retidas:288}") int maximoJanelasRetidas) {
         if (maximoJanelasRetidas <= 0) {
@@ -39,9 +42,15 @@ public class FluxoCreditoSolicitadoService {
      * Guarda na memória o acumulado para uma janela definida em minutos e exibe no ‘log’.
      * Responde à pergunta de negócio: Qual foi o volume de crédito solicitado a cada janela de 5 minutos?
      *
-     * @param evento Evento proveniente do broker.
+     * @param eventoId ce_id, vindo do CloudEvent.
+     * @param evento   Evento proveniente do broker.
      */
-    public void agregar(CreditoSolicitadoEvent evento) {
+    public void agregar(String eventoId, CreditoSolicitadoEvent evento) {
+        if (!eventosAgregados.add(eventoId)) {
+            log.info("Evento duplicado ignorado no fluxo de credito solicitado | eventoId={}", eventoId);
+            return;
+        }
+
         OffsetDateTime janela = alinharJanela(evento.getDataSolicitacao());
 
         AcumuladoJanela acumulado = acumuladosPorJanela.compute(janela, (chave, atual) -> {
