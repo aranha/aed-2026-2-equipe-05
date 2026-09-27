@@ -29,6 +29,10 @@ Como a agregação é mantida em memória e o resultado é exibido em log, não 
 
 ## Se o fluxo fosse reprocessado do começo amanhã, o resultado seria o mesmo?
 
-Sim. Se o mesmo conjunto de eventos fosse reprocessado do começo, com o estado em memória vazio, os totais finais por janela seriam os mesmos, porque a agregação usa o horário de ocorrência (`dataSolicitacao`) e os valores do próprio evento.
+Com o estado em memória vazio, o reprocessamento da mesma sequência de eventos reproduz os mesmos totais nas janelas retidas, porque a agregação usa o horário de ocorrência (`dataSolicitacao`) e os valores do próprio evento. A retenção deve ser considerada nessa comparação: janelas descartadas e seus IDs não ficam disponíveis para consultas ou deduplicação posterior.
 
-Além disso, o agregador agora é idempotente por `eventoId`: antes de somar uma solicitação na janela, ele verifica se aquele evento já foi processado por esse fluxo. Assim, uma reentrega do Kafka com o mesmo `eventoId` não incrementa novamente a quantidade nem o `totalSolicitado`. O resultado da agregação continua sendo mantido em memória e exibido em log, mas duplicatas do mesmo evento deixam de distorcer os números da janela.
+O agregador deduplica por `eventoId` enquanto a janela correspondente permanece em memória: antes de somar uma solicitação, verifica se o ID está no Set de eventos agregados. Durante esse período, uma reentrega do Kafka com o mesmo `eventoId` não incrementa novamente a quantidade nem o `totalSolicitado`.
+
+A deduplicação acompanha a retenção das janelas: cada janela mantém os IDs dos eventos agregados e, ao ser removida, seus IDs também são excluídos do Set de deduplicação. Assim, o Set armazena apenas IDs associados às janelas retidas, cujo limite padrão é 288. O consumo de memória ainda depende da quantidade de eventos nessas janelas.
+
+Após o descarte de uma janela, o mesmo evento pode ser processado novamente. Nesse caso, sua janela é recriada e pode ser removida imediatamente quando o limite de retenção for reaplicado. O resultado continua sendo exibido em log.
