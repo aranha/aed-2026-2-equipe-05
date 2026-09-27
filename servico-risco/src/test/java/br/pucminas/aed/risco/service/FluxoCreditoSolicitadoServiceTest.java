@@ -73,6 +73,40 @@ class FluxoCreditoSolicitadoServiceTest {
                 "janela=2026-08-22T14:00-03:00 | quantidade=2");
     }
 
+    @Test
+    void removeIdsSomenteDasJanelasDescartadas() {
+        var service = new FluxoCreditoSolicitadoService(2);
+
+        service.agregar("antigo-1", evento("antigo-1", "100.00", "2026-08-22T14:02:00-03:00"));
+        service.agregar("antigo-2", evento("antigo-2", "200.00", "2026-08-22T14:03:00-03:00"));
+        service.agregar("retido-1", evento("retido-1", "100.00", "2026-08-22T14:07:00-03:00"));
+        service.agregar("retido-2", evento("retido-2", "100.00", "2026-08-22T14:12:00-03:00"));
+
+        assertThat(idsAgregados(service)).containsExactlyInAnyOrder("retido-1", "retido-2");
+
+        // Uma janela atrasada descartada imediatamente tambem deve liberar seu ID.
+        service.agregar("atrasado", evento("atrasado", "100.00", "2026-08-22T14:02:00-03:00"));
+
+        assertThat(idsAgregados(service)).containsExactlyInAnyOrder("retido-1", "retido-2");
+    }
+
+    @Test
+    void preservaDeduplicacaoDasJanelasRetidasAposLimpeza(CapturedOutput saida) {
+        var service = new FluxoCreditoSolicitadoService(1);
+        service.agregar("expirado", evento("expirado", "100.00", "2026-08-22T14:02:00-03:00"));
+        var retido = evento("retido", "200.00", "2026-08-22T14:07:00-03:00");
+        service.agregar("retido", retido);
+        service.agregar("retido", retido);
+
+        assertThat(saida).contains("Evento duplicado ignorado no fluxo de credito solicitado | eventoId=retido")
+                .doesNotContain("quantidade=2");
+    }
+
+    @SuppressWarnings("unchecked")
+    private java.util.Set<String> idsAgregados(FluxoCreditoSolicitadoService service) {
+        return (java.util.Set<String>) org.springframework.test.util.ReflectionTestUtils
+                .getField(service, "eventosAgregados");
+    }
     private CreditoSolicitadoEvent evento(String eventoId, String valor, String dataSolicitacao) {
         return new CreditoSolicitadoEvent(
                 eventoId,
