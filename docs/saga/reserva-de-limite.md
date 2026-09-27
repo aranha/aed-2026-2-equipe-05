@@ -198,7 +198,7 @@ sol-vinicius-01
   "eventoId": "evt-eleg-vinicius-01",
   "solicitacaoId": "sol-vinicius-01",
   "clienteId": "cli-vinicius-01",
-  "valorAprovado": 3000.00,
+  "valorAprovado": 3000.0,
   "dataAprovacao": "2026-09-12T15:10:00-03:00"
 }
 ```
@@ -272,8 +272,8 @@ Deve existir uma mensagem correspondente à reserva, contendo dados equivalentes
 {
   "solicitacaoId": "sol-vinicius-01",
   "clienteId": "cli-vinicius-01",
-  "valorReservado": 3000.00,
-  "limiteDisponivel": 7000.00
+  "valorReservado": 3000.0,
+  "limiteDisponivel": 7000.0
 }
 ```
 

@@ -203,7 +203,7 @@ Value:
   "eventoId": "evt-eleg-vinicius-03",
   "solicitacaoId": "sol-vinicius-03",
   "clienteId": "cli-vinicius-03",
-  "valorAprovado": 3000.00,
+  "valorAprovado": 3000.0,
   "dataAprovacao": "2026-09-13T15:40:00-03:00"
 }
 ```
