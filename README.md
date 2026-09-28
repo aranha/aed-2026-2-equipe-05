@@ -2,6 +2,8 @@
 
 Projeto com serviços para solicitação e análise de crédito usando Spring Boot, Kafka e PostgreSQL.
 
+Para entender a arquitetura, os eventos e as decisões, comece por [docs/arquitetura.md](docs/arquitetura.md).
+
 ## Integrantes
 
 | Nome                                     | Matrícula | 
@@ -91,7 +93,7 @@ No Linux/macOS ou Git Bash:
 java -jar servico-risco/target/servico-risco-0.0.1-SNAPSHOT.jar
 ```
 
-Esse serviço consome eventos do Kafka, grava os resultados da análise no PostgreSQL e mantém um consumidor separado para observar o fluxo de crédito solicitado por janelas de tempo.
+Esse serviço consome eventos do Kafka, grava os resultados da análise no PostgreSQL, acompanha o desfecho da saga de reserva (status `PENDENTE`, `RESERVADA` ou `CANCELADA` em `analise_credito`) e mantém um consumidor separado para observar o fluxo de crédito solicitado por janelas de tempo.
 
 ## Como testar
 
@@ -236,6 +238,55 @@ Fluxo de credito solicitado | janela=2026-08-22T12:00-03:00 | quantidade=1 | tot
 Fluxo de credito solicitado | janela=2026-08-22T12:00-03:00 | quantidade=2 | totalSolicitado=3000.00
 Fluxo de credito solicitado | janela=2026-08-22T12:05-03:00 | quantidade=1 | totalSolicitado=5000.00
 ```
+
+## Saga de reserva de limite
+
+Quando a elegibilidade é aprovada, o `servico-credito` reserva o valor aprovado do limite do cliente e publica `LimiteDeCreditoReservado`. Se a proposta for recusada ou expirar, ele devolve o limite, marca a reserva como `CANCELADA` e publica `ReservaDeLimiteCancelada`. O `servico-risco` consome os dois eventos e atualiza o status da análise. Os contratos estão em [docs/contratos-da-saga.md](docs/contratos-da-saga.md) e o passo a passo detalhado em [docs/saga/](docs/saga/).
+
+`ElegibilidadeAprovada`, `PropostaDeCreditoRecusada` e `PropostaDeCreditoExpirada` são publicados por serviços fora deste recorte; para exercitar a saga, publique-os pela Kafka UI (`http://localhost:8081`), no tópico correspondente, com a chave igual ao `solicitacaoId` e o cabeçalho `{"ce_id": "<id do evento>"}`.
+
+1. Cadastre o limite do cliente:
+
+```bash
+docker exec -i aed-equipe-05-postgres psql -U aed -d aed -c "INSERT INTO limite_credito (cliente_id, limite_total, limite_disponivel) VALUES ('cli-ficticio-001', 10000.00, 10000.00) ON CONFLICT (cliente_id) DO UPDATE SET limite_total = 10000.00, limite_disponivel = 10000.00;"
+```
+
+2. Publique em `credito.elegibilidade.aprovada.v1`, com chave `sol-demo-01` e cabeçalho `{"ce_id": "evt-eleg-demo-01"}`:
+
+```json
+{"eventoId": "evt-eleg-demo-01", "solicitacaoId": "sol-demo-01", "clienteId": "cli-ficticio-001", "valorAprovado": 3000.00, "dataAprovacao": "2026-09-27T10:00:00-03:00"}
+```
+
+3. Publique em `credito.proposta.recusada.v1`, com chave `sol-demo-01` e cabeçalho `{"ce_id": "evt-recusa-demo-01"}`:
+
+```json
+{"eventoId": "evt-recusa-demo-01", "solicitacaoId": "sol-demo-01", "motivo": "TAXA_ACIMA_DO_ESPERADO", "dataRecusa": "2026-09-27T10:05:00-03:00"}
+```
+
+4. Confira o limite (10.000 depois de 7.000) e o desfecho da reserva:
+
+```bash
+docker exec -i aed-equipe-05-postgres psql -U aed -d aed -c "SELECT cliente_id, limite_disponivel FROM limite_credito;" -c "SELECT solicitacao_id, status, cancelada_em FROM reserva_limite;"
+```
+
+Publicar a mesma recusa de novo, ou uma expiração para a mesma solicitação, não devolve o limite outra vez.
+
+## Tratamento de falhas: retentativa e DLQ
+
+Os dois serviços tratam falhas da mesma forma (ver [ADR-006](docs/adr/ADR-006-retentativa-dlq-e-falha-da-compensacao.md)):
+
+- **Falha transitória** (banco indisponível, ou um evento que chegou antes daquele de que depende, como a recusa antes da reserva): até 4 retentativas com espera de 0,5 s, 1 s, 2 s e 4 s. Esgotadas, o registro vai para a DLQ.
+- **Falha permanente** (payload inválido, cabeçalho `ce_id` ausente, violação de integridade, cliente sem limite ou com limite insuficiente): vai direto para a DLQ, sem retentar.
+
+Cada tópico consumido tem uma DLQ `<tópico>.dlq`. O registro na DLQ leva a carga, os cabeçalhos `ce_*` originais, o motivo da falha (`kafka_dlt-exception-message`), o tópico, a partição, o offset e o grupo de origem (`kafka_dlt-original-*`), e a classificação (`classificacao`: `PERMANENTE` ou `TRANSITORIA`).
+
+Para ver o conteúdo de uma DLQ, com os cabeçalhos:
+
+```bash
+docker exec -it aed-equipe-05-kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server kafka:9094 --topic credito.proposta.recusada.v1.dlq --from-beginning --property print.headers=true --property print.key=true
+```
+
+A política é configurável por variável de ambiente: `RETENTATIVA_TENTATIVAS`, `RETENTATIVA_INTERVALO_INICIAL_MS`, `RETENTATIVA_MULTIPLICADOR` e `RETENTATIVA_INTERVALO_MAXIMO_MS`.
 
 ## Idempotência
 
