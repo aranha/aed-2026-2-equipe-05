@@ -181,7 +181,9 @@ Esse consumidor responde à pergunta: **qual foi o volume de crédito solicitado
 
 A agregação usa o relógio de ocorrência do evento, ou seja, o campo `dataSolicitacao`. As janelas são alinhadas em blocos fixos de 5 minutos: `12:00`, `12:05`, `12:10`, e assim por diante. O resultado aparece no log do `servico-risco`.
 
-O grupo pode ser alterado pela variável `KAFKA_GRUPO_FLUXO_CREDITO`. Para limitar o uso de memória, o consumidor mantém por padrão as 288 janelas mais recentes, equivalentes a 24 horas. Esse limite pode ser alterado pela variável `FLUXO_CREDITO_MAXIMO_JANELAS_RETIDAS`.
+O grupo pode ser alterado pela variável `KAFKA_GRUPO_FLUXO_CREDITO`. Para limitar o uso de memória, o consumidor mantém por padrão as 288 janelas mais recentes. Esse limite é por quantidade de janelas, não por idade: 288 janelas de 5 minutos correspondem a 24 horas apenas quando são consecutivas. O limite pode ser alterado pela variável `FLUXO_CREDITO_MAXIMO_JANELAS_RETIDAS`.
+
+Os IDs usados na deduplicação também são removidos quando suas respectivas janelas saem da retenção. Assim, a proteção contra reentregas pelo mesmo `eventoId` vale enquanto a janela permanece em memória; após seu descarte, o evento pode ser processado novamente.
 
 Para testar, deixe o `servico-credito` e o `servico-risco` rodando e envie solicitações com `dataSolicitacao` informada.
 

@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -45,23 +46,26 @@ public class FluxoCreditoSolicitadoService {
      * @param eventoId ce_id, vindo do CloudEvent.
      * @param evento   Evento proveniente do broker.
      */
-    public void agregar(String eventoId, CreditoSolicitadoEvent evento) {
-        if (!eventosAgregados.add(eventoId)) {
+    public synchronized void agregar(String eventoId, CreditoSolicitadoEvent evento) {
+        if (eventosAgregados.contains(eventoId)) {
             log.info("Evento duplicado ignorado no fluxo de credito solicitado | eventoId={}", eventoId);
             return;
         }
 
-        OffsetDateTime janela = alinharJanela(evento.getDataSolicitacao());
+                OffsetDateTime janela = alinharJanela(evento.getDataSolicitacao());
 
         AcumuladoJanela acumulado = acumuladosPorJanela.compute(janela, (chave, atual) -> {
             if (atual == null) {
-                return new AcumuladoJanela(evento.getValorSolicitado(), 1);
+                return new AcumuladoJanela(evento.getValorSolicitado(), 1, new HashSet<>());
             }
 
             return new AcumuladoJanela(
                     atual.totalSolicitado().add(evento.getValorSolicitado()),
-                    atual.quantidadeSolicitacoes() + 1);
+                    atual.quantidadeSolicitacoes() + 1, atual.eventoIds());
         });
+
+        acumulado.eventoIds().add(eventoId);
+        eventosAgregados.add(eventoId);
 
         removerJanelasExcedentes();
         log.info("Fluxo de credito solicitado | janela={} | quantidade={} | totalSolicitado={}",
@@ -91,10 +95,13 @@ public class FluxoCreditoSolicitadoService {
         acumuladosPorJanela.keySet().stream()
                 .sorted()
                 .limit(quantidadeExcedente)
-                .forEach(acumuladosPorJanela::remove);
+                .forEach(janela -> {
+                    AcumuladoJanela removido = acumuladosPorJanela.remove(janela);
+                    eventosAgregados.removeAll(removido.eventoIds());
+                });
     }
 
-    private record AcumuladoJanela(BigDecimal totalSolicitado, int quantidadeSolicitacoes) {
+    private record AcumuladoJanela(BigDecimal totalSolicitado, int quantidadeSolicitacoes, Set<String> eventoIds) {
     }
 
 }
