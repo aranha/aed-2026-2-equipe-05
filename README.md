@@ -394,6 +394,26 @@ No Linux/macOS ou Git Bash:
 mvn -f servico-risco/pom.xml -Dtest=ReprocessamentoDlqTest test
 ```
 
+### DLQs do `servico-credito`
+
+O `servico-credito` não tem reprocessador: as DLQs `credito.elegibilidade.aprovada.v1.dlq`, `credito.proposta.recusada.v1.dlq` e `credito.proposta.expirada.v1.dlq` são reprocessadas à mão, republicando o registro no tópico de origem pela Kafka UI. O caso que mais importa é a recusa ou expiração que chegou antes da reserva e esgotou as retentativas: enquanto ela estiver na DLQ, o limite do cliente fica preso.
+
+1. Confirme que a causa foi corrigida. No caso da recusa antes da reserva, a reserva precisa existir:
+
+```bash
+docker exec -i aed-equipe-05-postgres psql -U aed -d aed -c "SELECT solicitacao_id, status FROM reserva_limite WHERE solicitacao_id = 'sol-demo-01';"
+```
+
+2. Leia o registro na DLQ, com a chave e os cabeçalhos (comando em [Tratamento de falhas](#tratamento-de-falhas-retentativa-e-dlq)). Só republique registros com `classificacao=TRANSITORIA`. Um `PERMANENTE`, como limite insuficiente, exige corrigir o dado antes.
+3. Na Kafka UI (`http://localhost:8081`), em **Topics**, abra o tópico de origem (o nome da DLQ sem `.dlq`) e use **Produce Message** com a mesma chave, o mesmo corpo e os cabeçalhos `ce_*` do registro, por exemplo `{"ce_id": "evt-recusa-demo-01"}`. Não copie os cabeçalhos `kafka_dlt-*` nem o `classificacao`.
+4. Confira o desfecho: o limite volta ao valor anterior à reserva e a reserva fica `CANCELADA`:
+
+```bash
+docker exec -i aed-equipe-05-postgres psql -U aed -d aed -c "SELECT cliente_id, limite_disponivel FROM limite_credito;" -c "SELECT solicitacao_id, status, cancelada_em FROM reserva_limite;"
+```
+
+Republicar é seguro mesmo se o registro já tiver sido processado: a compensação é única por `ce_id` do gatilho e só muda a reserva de `RESERVADA` para `CANCELADA` uma vez, e a reserva é única por `solicitacaoId`. O registro continua na DLQ até a retenção do broker.
+
 ## Idempotência
 
 O serviço de risco possui uma classe de teste dedicada para validar idempotência:
