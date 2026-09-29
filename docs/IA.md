@@ -55,15 +55,21 @@
 
 - Para não deixar a seção de "consequências aceitas" do `arquitetura.md` com um `TODO` vazio, a IA sugeriu preencher com um número placeholder de tentativas de retentativa contra o Core Bancário (ex.: "3 tentativas com backoff exponencial"). Recusei essa sugestão: quantas tentativas e por quê é exatamente a decisão que a rubrica atribui à `ADR-006`, de responsabilidade do Hugo. Preencher esse número agora, mesmo como placeholder, tiraria dele a autoria de uma decisão que é parte da nota individual dele, e criaria risco de o documento ficar inconsistente com o que ele decidir de fato. Mantive a seção como `TODO`, apontando explicitamente para a `ADR-006`.
 
-## Etapa final — projeto final (Parte C)
+
+## Etapa final (Partes A, B e C)
 
 ### Registro da interação com IA
 
-#### 1. Interação usada para redigir a `ADR-006`
+#### 1. ADR-006 (Parte C)
 
-- Pedi à IA para ler os ADRs existentes, o `arquitetura.md`, o `contrato.md`, o README e o código dos dois serviços, conferir no código cada número que o ADR citaria e me apresentar um resumo e um esboço das seções antes de escrever.
-- A IA confirmou no código e no Spring Kafka os números da política: 4 retentativas, esperas que somam 7,5 s, `max.poll.interval.ms` padrão de 300.000 ms e 10 execuções imediatas no `servico-credito`. Apontou que os 7,5 s são só a soma das esperas: com o banco fora do ar, o registro leva cerca de 2 min 40 s para chegar à DLQ, e o `max.poll.interval.ms` vale para cada tentativa, não para o total.
-- A IA também apontou que o `arquitetura.md`, o README e os documentos da saga já descreviam decisões ainda não implementadas: três tentativas contra o Core Bancário, a política de falha do `servico-credito` e o status `CANCELADA` da reserva.
-- Escolhi manter no máximo 3 tentativas contra o Core Bancário, só com chave de idempotência, como o `arquitetura.md` já registrava. Para a falha da compensação, escolhi descrever o comportamento atual e registrar como decisão a política descrita no README, com dependência explícita do item 2.2.
-- Como a devolutiva não estava disponível no ambiente, a IA usou o resumo dela que está no documento de pendências.
-- A IA redigiu o ADR e conferiu no código a grafia de cada nome citado.
+- A equipe pediu à IA para redigir a ADR-006 a partir do código de retentativa e DLQ do `servico-risco`, da ADR-002 e das duas perguntas da devolutiva: quantas tentativas contra o Core Bancário, e o que acontece se a compensação falhar.
+- A IA observou que o Core Bancário não existe no código e propôs responder em dois planos: a política implementada nos consumidores (quatro retentativas, 7,5 s no pior caso, abaixo do `max.poll.interval.ms`) e a regra que vale para o desembolso quando ele existir (no máximo três tentativas, sempre com a mesma chave de idempotência e só quando o Core responde que não processou; timeout tratado como resultado desconhecido e enviado para a DLQ, sem retentativa automática). Aceitamos essa estrutura e revisamos as consequências aceitas.
+
+#### 2. Saga e compensação (Parte B)
+
+- A equipe pediu à IA para listar o que faltava na Parte B e implementar: consumidor dos eventos da saga, retentativa e DLQ nos consumidores do `servico-credito`, status da reserva e o caso de duas compensações para a mesma solicitação.
+- A IA apontou que `ReservaDeLimiteCancelada` era publicada e não era consumida por ninguém, que os consumidores do `servico-credito` estavam no padrão do Spring Kafka (dez execuções e o registro pulado) e que `reserva_limite.status` nunca saía de `RESERVADA`. Aceitamos as três correções e os testes que as demonstram.
+
+#### Recusa da sugestão da IA
+
+- Para responder "em que passo está esta solicitação", a IA sugeriu tornar a Solicitação de Crédito um agregado event sourced, com event store append-only e uma projeção reconstruída por replay. Recusamos: o custo (dois modelos, evolução de esquema dos eventos por upcasting, dado pessoal num log imutável) não se paga para uma pergunta que dois status respondem. Ficaram `analise_credito.status` (`PENDENTE`, `RESERVADA`, `CANCELADA`), alimentado pelos eventos da saga, e `reserva_limite.status` com `cancelada_em`, consultados pelas queries da seção 7 do `arquitetura.md`.

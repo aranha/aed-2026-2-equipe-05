@@ -22,8 +22,9 @@ spring:
       enable-auto-commit: false
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
       properties:
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
         spring.json.trusted.packages: br.pucminas.aed.credito.domain
         spring.json.use.type.headers: false
         spring.json.value.default.type: br.pucminas.aed.credito.domain.ElegibilidadeAprovadaEvent
@@ -40,5 +41,13 @@ app:
       proposta-recusada: credito.proposta.recusada.v1
       proposta-expirada: credito.proposta.expirada.v1
       reserva-cancelada: credito.reserva-limite.cancelada.v1
+      sufixo-dlq: ${KAFKA_SUFIXO_DLQ:.dlq}
     grupo:
       compensacao-reserva: credito-compensacao-reserva-v1
+    retentativa:
+      # Mesma politica do servico-risco (ver ADR-006): pior caso de 7,5s bloqueantes na
+      # particao, folgadamente abaixo de max.poll.interval.ms (5 min).
+      tentativas: ${RETENTATIVA_TENTATIVAS:4}
+      intervalo-inicial-ms: ${RETENTATIVA_INTERVALO_INICIAL_MS:500}
+      multiplicador: ${RETENTATIVA_MULTIPLICADOR:2.0}
+      intervalo-maximo-ms: ${RETENTATIVA_INTERVALO_MAXIMO_MS:5000}
