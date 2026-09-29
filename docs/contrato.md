@@ -1,4 +1,8 @@
-# Contrato do evento de solicitação de crédito
+# Contratos de eventos
+
+Este documento traz o contrato do evento que abre o fluxo, `credito.solicitacao.solicitada.v1`, e o do evento de compensação da saga, `credito.reserva-limite.cancelada.v1`. Os demais eventos da saga estão em [contratos-da-saga.md](contratos-da-saga.md), com as mesmas regras.
+
+# Evento de solicitação de crédito
 
 ## Tipo do evento
 
@@ -65,5 +69,53 @@ Todos os valores abaixo são fictícios:
   "valorSolicitado": 15000.00,
   "dataSolicitacao": "2026-08-23T14:30:00-03:00",
   "canalOrigem": "APP"
+}
+```
+
+# Evento de compensação: ReservaDeLimiteCancelada
+
+## Tipo do evento
+
+```text
+credito.reserva-limite.cancelada.v1
+```
+
+Publicado pelo `servico-credito` (`ce_source=/credito/limites`) quando uma proposta é recusada ou expira depois de o limite ter sido reservado. Informa que a reserva foi desfeita e o valor voltou ao limite disponível do cliente. É um fato novo: a reserva original não é apagada nem reescrita, e o `LimiteDeCreditoReservado` que a criou continua no tópico dele. Consumido pelo `servico-risco` (grupo `risco-saga-reserva-v1`), que marca a análise como `CANCELADA`.
+
+## Campos da carga
+
+| Campo | Tipo | Obrigatório | Significado |
+|---|---|---:|---|
+| `eventoId` | string (UUID) | Sim | Identidade do cancelamento, igual ao `ce_id`. Uma reentrega do mesmo gatilho republica este mesmo `eventoId`, e os consumidores deduplicam por ele. |
+| `eventoOrigemId` | string (UUID) | Sim | `eventoId` da recusa ou da expiração que provocou o cancelamento. É a chave que impede devolver o limite duas vezes pelo mesmo gatilho. |
+| `solicitacaoId` | string (UUID) | Sim | Solicitação cuja reserva foi cancelada; é também a chave de partição. |
+| `clienteId` | string | Sim | Identificador interno do cliente que recebeu o limite de volta; não contém dado pessoal. |
+| `valorDevolvido` | decimal positivo | Sim | Quanto voltou ao limite disponível; é igual ao valor da reserva cancelada. |
+| `limiteDisponivel` | decimal | Sim | Limite disponível do cliente **depois** da devolução. |
+| `motivo` | string | Sim | `PROPOSTA_RECUSADA` ou `PROPOSTA_EXPIRADA`, conforme o gatilho. Novos valores podem ser acrescentados sem mudar o significado do campo. |
+| `dataCancelamento` | string no formato ISO-8601 com offset | Sim | Instante em que a compensação foi gravada, no offset de Brasília (`-03:00`); é também o `ce_time`. |
+
+## Chave de partição e ordenação
+
+A chave é `solicitacaoId`, a mesma do `CreditoSolicitado`. Os eventos de uma solicitação ficam na mesma partição do tópico de compensação, mas não há ordem entre tópicos: um consumidor pode receber o cancelamento antes da reserva, e as transições de status no `servico-risco` só avançam para que isso não desfaça um cancelamento.
+
+## Compatibilidade
+
+**FULL**, pelas mesmas razões do evento de solicitação: produtor e consumidor sobem em qualquer ordem. Campo novo entra como opcional; nenhum campo existente é removido, renomeado ou muda de tipo ou de significado dentro da `v1`. Se `limiteDisponivel` passasse a representar o saldo antes da devolução, o esquema continuaria válido e todo consumidor mostraria o número errado: essa mudança exige `credito.reserva-limite.cancelada.v2`.
+
+## Exemplo de carga
+
+Todos os valores abaixo são fictícios:
+
+```json
+{
+  "eventoId": "c3d4e5f6-3333-4444-8555-b66677778888",
+  "eventoOrigemId": "a1c2e3f4-1111-4222-8333-944455556666",
+  "solicitacaoId": "75ae6c98-2856-4717-9842-33a6f1f70953",
+  "clienteId": "cli-ficticio-001",
+  "valorDevolvido": 3000.00,
+  "limiteDisponivel": 10000.00,
+  "motivo": "PROPOSTA_RECUSADA",
+  "dataCancelamento": "2026-09-27T10:05:01-03:00"
 }
 ```

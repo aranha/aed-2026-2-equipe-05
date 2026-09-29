@@ -275,7 +275,7 @@ Publicar a mesma recusa de novo, ou uma expiração para a mesma solicitação, 
 
 ## Tratamento de falhas: retentativa e DLQ
 
-Os dois serviços tratam falhas da mesma forma (ver [ADR-006](docs/adr/ADR-006-retentativa-dlq-e-falha-da-compensacao.md)):
+Os dois serviços tratam falhas da mesma forma (ver [ADR-006](docs/adr/ADR-006-resiliencia.md)):
 
 - **Falha transitória** (banco indisponível, ou um evento que chegou antes daquele de que depende, como a recusa antes da reserva): até 4 retentativas com espera de 0,5 s, 1 s, 2 s e 4 s. Esgotadas, o registro vai para a DLQ.
 - **Falha permanente** (payload inválido, cabeçalho `ce_id` ausente, violação de integridade, cliente sem limite ou com limite insuficiente): vai direto para a DLQ, sem retentar.

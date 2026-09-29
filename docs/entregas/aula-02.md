@@ -9,7 +9,7 @@ Também foram adicionados testes automatizados, incluindo um teste específico d
 ## Por onde começar a leitura
 
 1. [README do projeto](../../README.md): instruções completas para subir a infraestrutura, empacotar os serviços, rodar os `.jar`, testar e chamar a API.
-2. [ADR-002 - Domínio do projeto](../adr/ADR-002-dominio-do-projeto.md): decisão arquitetural sobre o domínio de concessão de crédito.
+2. [ADR-002 - Domínio do projeto](../adr/ADR-002-dominio.md): decisão arquitetural sobre o domínio de concessão de crédito.
 3. [Serviço de crédito](../../servico-credito): API HTTP e publicação do evento no Kafka.
 4. [SolicitacaoCreditoController](../../servico-credito/src/main/java/br/pucminas/aed/credito/controller/SolicitacaoCreditoController.java): endpoint `POST /solicitacoes`.
 5. [CreditoService](../../servico-credito/src/main/java/br/pucminas/aed/credito/service/CreditoService.java): validação da solicitação e publicação do evento.

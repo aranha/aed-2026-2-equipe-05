@@ -7,7 +7,7 @@ Este documento estende o [contrato.md](contrato.md), que rege `credito.solicitac
 - **Envelope:** CloudEvents 1.0 em modo binário. `ce_specversion`, `ce_id`, `ce_source`, `ce_type` e `ce_time` vão nos cabeçalhos; a carga vai no corpo, em JSON.
 - **Tipo e tópico:** o nome do tópico é igual ao `ce_type`.
 - **Identidade:** `eventoId` na carga é igual ao `ce_id`. É a chave de deduplicação dos consumidores.
-- **Chave de partição:** `solicitacaoId` em todos os eventos. Todos os eventos da mesma solicitação caem na mesma partição do seu tópico. Não há ordem garantida entre tópicos diferentes; os consumidores tratam isso (ver [ADR-006](adr/ADR-006-retentativa-dlq-e-falha-da-compensacao.md)).
+- **Chave de partição:** `solicitacaoId` em todos os eventos. Todos os eventos da mesma solicitação caem na mesma partição do seu tópico. Não há ordem garantida entre tópicos diferentes; os consumidores tratam isso (ver [ADR-006](adr/ADR-006-resiliencia.md)).
 - **Datas:** texto ISO-8601 com offset explícito, nunca epoch.
 - **Valores monetários:** decimal com duas casas, em reais.
 - **Compatibilidade:** **FULL**, pelas mesmas razões do `contrato.md`. Campo novo entra como opcional; campo obrigatório não é removido, renomeado nem muda de tipo ou de significado dentro da `v1`. Mudança de significado exige `v2` publicada em paralelo.

@@ -4,7 +4,7 @@
 Aceita · 2026-09-29 · Equipe 05
 
 ## Contexto
-O Kafka entrega cada evento pelo menos uma vez, e não há ordem garantida entre tópicos diferentes. Um consumidor que falha precisa decidir se tenta de novo, por quanto tempo e para onde vai o evento quando desiste. No domínio da [ADR-002](ADR-002-dominio-do-projeto.md), decidir errado tem dois custos: o **duplo desembolso**, quando uma retentativa repete um efeito financeiro, e o **limite preso**, quando um evento é descartado e a reserva fica sem desfecho.
+O Kafka entrega cada evento pelo menos uma vez, e não há ordem garantida entre tópicos diferentes. Um consumidor que falha precisa decidir se tenta de novo, por quanto tempo e para onde vai o evento quando desiste. No domínio da [ADR-002](ADR-002-dominio.md), decidir errado tem dois custos: o **duplo desembolso**, quando uma retentativa repete um efeito financeiro, e o **limite preso**, quando um evento é descartado e a reserva fica sem desfecho.
 
 O ponto de partida no código:
 
@@ -12,7 +12,7 @@ O ponto de partida no código:
 - O `servico-credito` consumia `credito.elegibilidade.aprovada.v1`, `credito.proposta.recusada.v1` e `credito.proposta.expirada.v1` sem tratador de falha próprio. Valia o padrão do Spring Kafka 3.2: `DefaultErrorHandler` com `FixedBackOff(0, 9)`, isto é, 10 execuções seguidas, sem espera, e depois o evento era registrado no log e pulado.
 - O Core Bancário e o desembolso não existem neste recorte. `ElegibilidadeAprovada`, `PropostaDeCreditoRecusada` e `PropostaDeCreditoExpirada` são publicados à mão pela Kafka UI.
 
-A equipe tem sete integrantes e cada parte tem um dono: a análise e o caminho de falha no `servico-risco`, a reserva e a compensação no `servico-credito`, a documentação de arquitetura. Os dois serviços têm banco e deploy próprios e só se conhecem pelos tópicos.
+A equipe tem sete integrantes e cada parte tem um dono: a análise e o caminho de falha no `servico-risco`, a reserva e a compensação no `servico-credito`, a documentação de arquitetura. Os dois serviços têm tabelas e deploy próprios e só se conhecem pelos tópicos; no ambiente padrão, as tabelas ficam no mesmo banco PostgreSQL (`BANCO_URL`).
 
 ## Decisão
 
@@ -29,6 +29,8 @@ Implementada em `RiscoConfig` (`tratadorDeFalhaDoConsumidor`) e configurável em
 ### 2. Reprocessamento manual e idempotente
 
 A DLQ é reprocessada sob demanda, pelo operador, depois de corrigida a causa. Com `app.kafka.reprocessamento-dlq.habilitado=true`, o `servico-risco` lê cada uma das suas DLQs uma vez na inicialização, com o grupo `risco-reprocessamento-dlq-v1`, até o fim que ela tinha no início, e republica no tópico original cada registro `TRANSITORIA`, com a mesma chave e os mesmos `ce_*`, sem os `kafka_dlt-*` e sem a `classificacao`. Registros `PERMANENTE` ficam na DLQ, porque republicá-los só repetiria o erro. A idempotência vem do dedup por `ce_id`. O que falhar de novo volta para a DLQ e fica para a próxima execução (`ReprocessamentoDlqService`, `ReprocessamentoDlqTest`).
+
+**Quem olha e com que frequência.** O dono de cada serviço olha as DLQs dele: o de `servico-risco` as três do `servico-risco`, o de `servico-credito` as três do `servico-credito`. A conferência é diária, junto com a consulta de reservas `RESERVADA` sem desfecho (seção 7 do `arquitetura.md`), e também depois de qualquer incidente de banco ou de broker. As DLQs da compensação vêm primeiro, porque cada registro nelas é limite de cliente preso. Não há plantão nem alerta: é a frequência que uma equipe sem operação contínua consegue sustentar, e o custo está nas consequências aceitas.
 
 ### 3. Retentativa contra o Core Bancário
 
@@ -49,7 +51,7 @@ Não implementada neste recorte. A regra vale quando o desembolso existir:
 
 - recusa ou expiração que chega antes da reserva é **falha transitória**: retenta e, esgotadas as tentativas, vai para a DLQ com `classificacao=TRANSITORIA`;
 - cliente sem limite cadastrado ou com limite insuficiente é **falha permanente** (`IllegalArgumentException`): vai direto para a DLQ;
-- um segundo gatilho para uma solicitação já compensada é ignorado sem erro: a reserva só passa de `RESERVADA` para `CANCELADA` uma vez (`ReservaLimiteRepository.marcarCancelada`), então o limite não é devolvido de novo e nenhum evento é publicado. A reentrega do mesmo gatilho (mesmo `ce_id`) reusa o cancelamento registrado e publica `ReservaDeLimiteCancelada` de novo;
+- um segundo gatilho para uma solicitação já compensada é ignorado sem erro: a reserva só passa de `RESERVADA` para `CANCELADA` uma vez (`ReservaLimiteRepository.marcarCancelada`), então o limite não é devolvido de novo e nenhum evento é publicado. Essa mudança de status é estado derivado, para a consulta; o fato que registra o desfazer é o `ReservaDeLimiteCancelada` publicado e a linha nova em `cancelamento_reserva`, e a reserva original não é apagada. A reentrega do mesmo gatilho (mesmo `ce_id`) reusa o cancelamento registrado e publica `ReservaDeLimiteCancelada` de novo;
 - cada tópico consumido tem sua DLQ `<tópico>.dlq`.
 
 O `servico-credito` ainda não tem reprocessador. Até lá, reprocessar uma compensação que está na DLQ é republicar o registro no tópico original pela Kafka UI, com a mesma chave e os mesmos `ce_*`. É seguro porque a compensação é idempotente pelo `ce_id` e pelo status da reserva.
