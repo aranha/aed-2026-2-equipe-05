@@ -292,15 +292,15 @@ A política é configurável por variável de ambiente: `RETENTATIVA_TENTATIVAS`
 
 ## Reprocessamento da DLQ
 
-**Quando usar.** Depois de corrigir a causa de uma falha transitória que esgotou as retentativas (por exemplo, o banco voltou ao ar), para devolver ao fluxo o que ficou em `credito.solicitacao.solicitada.v1.dlq`. Um registro com falha permanente (payload inválido, `ce_id` ausente) volta para a DLQ com o mesmo motivo: ele exige corrigir o dado na origem, e não reprocessar.
+**Quando usar.** Depois de corrigir a causa de uma falha transitória que esgotou as retentativas (por exemplo, o banco voltou ao ar, ou chegou o `CreditoSolicitado` de que um `LimiteDeCreditoReservado` dependia), para devolver ao fluxo o que ficou nas DLQs do `servico-risco`: `credito.solicitacao.solicitada.v1.dlq`, `credito.limite.reservado.v1.dlq` e `credito.reserva-limite.cancelada.v1.dlq`. Registros com `classificacao=PERMANENTE` (payload inválido, `ce_id` ausente) não são republicados: eles exigem corrigir o dado na origem, e não reprocessar.
 
-**O que acontece.** Com `--app.kafka.reprocessamento-dlq.habilitado=true` (ou `REPROCESSAR_DLQ=true`), o `servico-risco` lê a DLQ uma vez, na inicialização, e republica cada registro em `credito.solicitacao.solicitada.v1`:
+**O que acontece.** Com `--app.kafka.reprocessamento-dlq.habilitado=true` (ou `REPROCESSAR_DLQ=true`), o `servico-risco` lê cada DLQ uma vez, na inicialização, e republica cada registro com `classificacao=TRANSITORIA` no tópico de origem (`<tópico>.dlq` volta para `<tópico>`):
 
 - com a mesma chave (`solicitacaoId`), portanto na mesma partição dos demais eventos da solicitação;
-- com os mesmos cabeçalhos `ce_*` e o corpo que está na DLQ: o original, quando a desserialização falhou, ou o evento reserializado com os mesmos campos e valores, incluindo o offset `-03:00` da data, quando o listener falhou. Os cabeçalhos `kafka_dlt-*` são removidos: eles descrevem a falha anterior e não fazem parte do contrato do tópico; se a mensagem falhar de novo, a DLQ grava os da nova falha;
-- uma vez por registro de origem: quando os dois grupos do serviço falham na mesma mensagem, a DLQ tem duas cópias, e só uma é republicada.
+- com os mesmos cabeçalhos `ce_*` e o corpo que está na DLQ: o original, quando a desserialização falhou ou o consumidor é da saga (que lê o JSON como texto), ou o evento reserializado com os mesmos campos e valores, incluindo o offset `-03:00` da data, quando o listener da análise ou do fluxo falhou. Os cabeçalhos `kafka_dlt-*` e `classificacao` são removidos: eles descrevem a falha anterior e não fazem parte do contrato do tópico; se a mensagem falhar de novo, a DLQ grava os da nova falha;
+- uma vez por registro de origem: quando os dois grupos que leem `credito.solicitacao.solicitada.v1` falham na mesma mensagem, a DLQ tem duas cópias, e só uma é republicada.
 
-A leitura vai do ponto em que o grupo `risco-reprocessamento-dlq-v1` parou até o fim que a DLQ tinha no início da execução, e o offset só é confirmado depois que o broker aceita a republicação. Uma mensagem que falhar de novo passa pela retentativa normal e volta para a DLQ depois desse fim: fica para a próxima execução, sem loop. Os registros não são apagados da DLQ; ficam lá até a retenção do broker.
+A leitura de cada DLQ vai do ponto em que o grupo `risco-reprocessamento-dlq-v1` parou até o fim que ela tinha no início da execução, e o offset só é confirmado depois que o broker aceita a republicação. Uma mensagem que falhar de novo passa pela retentativa normal e volta para a DLQ depois desse fim: fica para a próxima execução, sem loop. Os registros não são apagados da DLQ; ficam lá até a retenção do broker.
 
 ### Passo a passo
 
@@ -348,11 +348,13 @@ No Git Bash, prefixe os comandos `docker exec` com `MSYS_NO_PATHCONV=1`; sem iss
 
 ### Como verificar
 
-O log de inicialização mostra uma linha por registro republicado e um resumo. A `origem` é a posição do `Recovery record` do passo 3, e o `destino` fica na mesma partição:
+O log de inicialização mostra uma linha por registro republicado ou ignorado e um resumo por DLQ. A `origem` é a posição do `Recovery record` do passo 3, e o `destino` fica na mesma partição:
 
 ```text
 Registro da DLQ republicado | ce_id=<eventoId> | origem=credito.solicitacao.solicitada.v1-2@2 | destino=credito.solicitacao.solicitada.v1-2@3
 Reprocessamento da DLQ concluido | topico=credito.solicitacao.solicitada.v1.dlq | republicados=1 | ignorados=0
+Reprocessamento da DLQ concluido | topico=credito.limite.reservado.v1.dlq | republicados=0 | ignorados=0
+Reprocessamento da DLQ concluido | topico=credito.reserva-limite.cancelada.v1.dlq | republicados=0 | ignorados=0
 ```
 
 Depois que os consumidores recebem as partições, a análise está gravada. Troque os ids pelos do passo 2:
@@ -365,7 +367,7 @@ Resultado esperado: uma linha em cada consulta, com a análise em `PENDENTE`.
 
 ### Por que é idempotente
 
-A mensagem republicada leva o mesmo `ce_id`, e a análise deduplica por ele: o `ce_id` é registrado em `evento_processado` na mesma transação em que `analise_credito` é gravada (`on conflict do nothing`). Por isso, reprocessar o mesmo registro de novo, por engano ou de propósito, não cria outra análise.
+A mensagem republicada leva o mesmo `ce_id`, e a análise deduplica por ele: o `ce_id` é registrado em `evento_processado` na mesma transação em que `analise_credito` é gravada (`on conflict do nothing`). Por isso, reprocessar o mesmo registro de novo, por engano ou de propósito, não cria outra análise. O consumidor da saga usa o mesmo registro de `ce_id`, e as transições de status só avançam: um desfecho republicado não desfaz outro já aplicado.
 
 O agregador de fluxo também recebe a mensagem republicada, mas o estado dele fica em memória e o reprocessamento reinicia o serviço. Por isso, ele conta o evento uma vez no novo processo, como qualquer evento que chega depois de um reinício (ver [Consumidor de fluxo por janela de tempo](#consumidor-de-fluxo-por-janela-de-tempo)).
 
@@ -380,7 +382,7 @@ docker exec aed-equipe-05-kafka /opt/kafka/bin/kafka-consumer-groups.sh --bootst
 2. Suba o serviço de novo com a flag, como no passo 6. O log mostra o mesmo `ce_id` republicado outra vez, com um novo `destino`.
 3. Rode as consultas de [Como verificar](#como-verificar): continua uma linha em cada, e o `processado_em` é o da primeira execução.
 
-Os mesmos cenários estão automatizados em `ReprocessamentoDlqTest`: a mensagem que falha vai para a DLQ e é republicada com o mesmo `ce_id`, a mesma chave e os mesmos cabeçalhos; reprocessada duas vezes, produz um único efeito; se voltar a falhar, retorna à DLQ uma única vez; e uma falha comum aos dois grupos é republicada uma só vez.
+Os mesmos cenários estão automatizados em `ReprocessamentoDlqTest`: a mensagem que falha vai para a DLQ e é republicada com o mesmo `ce_id`, a mesma chave e os mesmos cabeçalhos; reprocessada duas vezes, produz um único efeito; se voltar a falhar, retorna à DLQ uma única vez; uma falha comum aos dois grupos é republicada uma só vez; uma falha permanente fica na DLQ; e um `LimiteDeCreditoReservado` que foi para a DLQ por ter chegado antes da análise muda o status para `RESERVADA` quando reprocessado.
 
 ```powershell
 mvn -f servico-risco\pom.xml -Dtest=ReprocessamentoDlqTest test

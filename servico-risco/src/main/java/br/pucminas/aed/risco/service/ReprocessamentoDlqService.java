@@ -29,12 +29,14 @@ import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.stereotype.Service;
 
 /**
- * Reprocessamento manual da DLQ de credito solicitado.
+ * Reprocessamento manual das DLQs do servico-risco.
  *
- * <p>Republica no topico original cada registro que estava na DLQ quando a execucao comecou,
- * com a mesma chave e os mesmos cabecalhos {@code ce_*}. A idempotencia vem do dedup por
- * {@code ce_id} dos consumidores. Um registro que falhar de novo passa pela retentativa normal
- * e volta para a DLQ depois do fim lido aqui, entao fica para a proxima execucao: nao ha loop.
+ * <p>Para cada topico consumido, republica no topico original cada registro que estava em
+ * {@code <topico>.dlq} quando a execucao comecou, com a mesma chave e os mesmos cabecalhos
+ * {@code ce_*}. Registros classificados como falha PERMANENTE ficam na DLQ: republica-los so
+ * repetiria o erro. A idempotencia vem do dedup por {@code ce_id} dos consumidores. Um registro
+ * que falhar de novo passa pela retentativa normal e volta para a DLQ depois do fim lido aqui,
+ * entao fica para a proxima execucao: nao ha loop.
  */
 @Service
 public class ReprocessamentoDlqService {
@@ -44,70 +46,88 @@ public class ReprocessamentoDlqService {
 
     private final ConsumerFactory<?, ?> fabricaDeConsumidores;
     private final KafkaTemplate<String, Object> clienteDaDlq;
-    private final String topico;
-    private final String topicoDlq;
+    private final List<String> topicos;
+    private final String sufixoDlq;
     private final String grupo;
 
     public ReprocessamentoDlqService(
             ConsumerFactory<?, ?> fabricaDeConsumidores,
             KafkaTemplate<String, Object> clienteDaDlq,
-            @Value("${app.kafka.topico.credito-solicitado}") String topico,
+            @Value("${app.kafka.topico.credito-solicitado}") String topicoCreditoSolicitado,
+            @Value("${app.kafka.topico.limite-reservado}") String topicoLimiteReservado,
+            @Value("${app.kafka.topico.reserva-cancelada}") String topicoReservaCancelada,
             @Value("${app.kafka.topico.sufixo-dlq}") String sufixoDlq,
             @Value("${app.kafka.grupo.reprocessamento-dlq}") String grupo) {
         this.fabricaDeConsumidores = fabricaDeConsumidores;
         this.clienteDaDlq = clienteDaDlq;
-        this.topico = topico;
-        this.topicoDlq = topico + sufixoDlq;
+        this.topicos = List.of(topicoCreditoSolicitado, topicoLimiteReservado, topicoReservaCancelada);
+        this.sufixoDlq = sufixoDlq;
         this.grupo = grupo;
     }
 
     /**
-     * Le a DLQ a partir do offset confirmado pelo grupo de reprocessamento ate o fim registrado
+     * Le cada DLQ a partir do offset confirmado pelo grupo de reprocessamento ate o fim registrado
      * no inicio e confirma o offset so depois que o broker aceitou a republicacao.
      *
-     * @return quantidade de registros republicados.
+     * @return quantidade de registros republicados, somando todas as DLQs.
      */
     public int reprocessar() {
         int republicados = 0;
-        int ignorados = 0;
         try (Consumer<String, byte[]> consumidor = criarConsumidor()) {
-            List<TopicPartition> particoes = consumidor.partitionsFor(topicoDlq).stream()
-                    .map(informacao -> new TopicPartition(topicoDlq, informacao.partition()))
-                    .toList();
-            Map<TopicPartition, Long> fim = consumidor.endOffsets(particoes);
-            // Os dois grupos do servico-risco escrevem na mesma DLQ: uma falha comum aos dois
-            // gera um registro por grupo. Basta republicar a origem uma vez, os dois grupos a
-            // leem de novo.
-            Set<String> origensRepublicadas = new HashSet<>();
+            for (String topico : topicos) {
+                republicados += reprocessar(consumidor, topico);
+            }
+        }
+        return republicados;
+    }
 
-            for (TopicPartition particao : particoes) {
-                long limite = fim.get(particao);
-                consumidor.assign(List.of(particao));
-                while (consumidor.position(particao) < limite) {
-                    var envios = new ArrayList<CompletableFuture<?>>();
-                    for (ConsumerRecord<String, byte[]> registro : consumidor.poll(ESPERA_DA_LEITURA)) {
-                        if (registro.offset() >= limite) {
-                            break;
-                        }
-                        String origem = origem(registro);
-                        String eventoId = cabecalho(registro, "ce_id");
-                        if (!origensRepublicadas.add(origem)) {
-                            ignorados++;
-                            log.info("Registro da DLQ ignorado, origem ja republicada | ce_id={} | origem={}",
-                                    eventoId, origem);
-                            continue;
-                        }
-                        republicados++;
-                        envios.add(clienteDaDlq.send(republicacao(registro)).thenAccept(resultado ->
-                                log.info("Registro da DLQ republicado | ce_id={} | origem={} | destino={}@{}",
-                                        eventoId, origem,
-                                        new TopicPartition(topico, resultado.getRecordMetadata().partition()),
-                                        resultado.getRecordMetadata().offset())));
+    private int reprocessar(Consumer<String, byte[]> consumidor, String topico) {
+        String topicoDlq = topico + sufixoDlq;
+        int republicados = 0;
+        int ignorados = 0;
+        List<TopicPartition> particoes = consumidor.partitionsFor(topicoDlq).stream()
+                .map(informacao -> new TopicPartition(topicoDlq, informacao.partition()))
+                .toList();
+        Map<TopicPartition, Long> fim = consumidor.endOffsets(particoes);
+        // Os dois grupos que leem credito solicitado escrevem na mesma DLQ: uma falha comum aos
+        // dois gera um registro por grupo. Basta republicar a origem uma vez, os dois grupos a
+        // leem de novo.
+        Set<String> origensRepublicadas = new HashSet<>();
+
+        for (TopicPartition particao : particoes) {
+            long limite = fim.get(particao);
+            consumidor.assign(List.of(particao));
+            while (consumidor.position(particao) < limite) {
+                var envios = new ArrayList<CompletableFuture<?>>();
+                for (ConsumerRecord<String, byte[]> registro : consumidor.poll(ESPERA_DA_LEITURA)) {
+                    if (registro.offset() >= limite) {
+                        break;
                     }
-                    CompletableFuture.allOf(envios.toArray(CompletableFuture[]::new)).join();
-                    long confirmado = Math.min(consumidor.position(particao), limite);
-                    consumidor.commitSync(Map.of(particao, new OffsetAndMetadata(confirmado)));
+                    String origem = origem(registro, topico);
+                    String eventoId = cabecalho(registro, "ce_id");
+                    if (CabecalhosDeFalhaFunction.PERMANENTE.equals(
+                            cabecalho(registro, CabecalhosDeFalhaFunction.CLASSIFICACAO))) {
+                        ignorados++;
+                        log.info("Registro da DLQ ignorado, falha permanente | ce_id={} | origem={}",
+                                eventoId, origem);
+                        continue;
+                    }
+                    if (!origensRepublicadas.add(origem)) {
+                        ignorados++;
+                        log.info("Registro da DLQ ignorado, origem ja republicada | ce_id={} | origem={}",
+                                eventoId, origem);
+                        continue;
+                    }
+                    republicados++;
+                    envios.add(clienteDaDlq.send(republicacao(registro, topico)).thenAccept(resultado ->
+                            log.info("Registro da DLQ republicado | ce_id={} | origem={} | destino={}@{}",
+                                    eventoId, origem,
+                                    new TopicPartition(topico, resultado.getRecordMetadata().partition()),
+                                    resultado.getRecordMetadata().offset())));
                 }
+                CompletableFuture.allOf(envios.toArray(CompletableFuture[]::new)).join();
+                long confirmado = Math.min(consumidor.position(particao), limite);
+                consumidor.commitSync(Map.of(particao, new OffsetAndMetadata(confirmado)));
             }
         }
         log.info("Reprocessamento da DLQ concluido | topico={} | republicados={} | ignorados={}",
@@ -129,15 +149,16 @@ public class ReprocessamentoDlqService {
 
     /**
      * Sem particao explicita: a chave decide, como na publicacao original, e o registro cai na
-     * mesma particao dos demais eventos da solicitacao. Os cabecalhos {@code kafka_dlt-*}
-     * descrevem a falha anterior e nao fazem parte do contrato do topico. Se ficassem, uma nova
-     * falha levaria para a DLQ dois conjuntos de {@code kafka_dlt-original-*}, e o primeiro
-     * apontaria para o offset antigo.
+     * mesma particao dos demais eventos da solicitacao. Os cabecalhos {@code kafka_dlt-*} e
+     * {@code classificacao} descrevem a falha anterior e nao fazem parte do contrato do topico.
+     * Se ficassem, uma nova falha levaria para a DLQ dois conjuntos de
+     * {@code kafka_dlt-original-*}, e o primeiro apontaria para o offset antigo.
      */
-    private ProducerRecord<String, Object> republicacao(ConsumerRecord<String, byte[]> registro) {
+    private ProducerRecord<String, Object> republicacao(ConsumerRecord<String, byte[]> registro, String topico) {
         var cabecalhos = new RecordHeaders();
         for (Header cabecalho : registro.headers()) {
-            if (!cabecalho.key().startsWith(PREFIXO_CABECALHO_DLT)) {
+            if (!cabecalho.key().startsWith(PREFIXO_CABECALHO_DLT)
+                    && !cabecalho.key().equals(CabecalhosDeFalhaFunction.CLASSIFICACAO)) {
                 cabecalhos.add(cabecalho);
             }
         }
@@ -145,7 +166,7 @@ public class ReprocessamentoDlqService {
     }
 
     /** Posicao do registro no topico original; sem os cabecalhos da DLQ, a posicao na propria DLQ. */
-    private String origem(ConsumerRecord<String, byte[]> registro) {
+    private String origem(ConsumerRecord<String, byte[]> registro, String topico) {
         Header particao = registro.headers().lastHeader(KafkaHeaders.DLT_ORIGINAL_PARTITION);
         Header offset = registro.headers().lastHeader(KafkaHeaders.DLT_ORIGINAL_OFFSET);
         if (particao == null || offset == null) {

@@ -11,6 +11,7 @@ import static org.mockito.Mockito.verify;
 import br.pucminas.aed.risco.service.AnaliseCreditoRepository;
 import br.pucminas.aed.risco.service.AnaliseCreditoService;
 import br.pucminas.aed.risco.service.EventoProcessadoRepository;
+import br.pucminas.aed.risco.service.FluxoCreditoSolicitadoService;
 import br.pucminas.aed.risco.service.ReprocessamentoDlqService;
 import java.nio.ByteBuffer;
 import java.time.Duration;
@@ -47,7 +48,9 @@ import org.springframework.test.context.TestPropertySource;
 @SpringBootTest
 @EmbeddedKafka(partitions = 3, topics = {
         "credito.solicitacao.solicitada.v1",
-        "credito.solicitacao.solicitada.v1.dlq"
+        "credito.solicitacao.solicitada.v1.dlq",
+        "credito.limite.reservado.v1",
+        "credito.limite.reservado.v1.dlq"
 })
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 @TestPropertySource(properties = {
@@ -64,6 +67,9 @@ import org.springframework.test.context.TestPropertySource;
 class ReprocessamentoDlqTest {
     private static final String TOPICO = "credito.solicitacao.solicitada.v1";
     private static final String TOPICO_DLQ = "credito.solicitacao.solicitada.v1.dlq";
+    private static final String TOPICO_RESERVADO = "credito.limite.reservado.v1";
+    private static final String TOPICO_RESERVADO_DLQ = "credito.limite.reservado.v1.dlq";
+    private static final String TOPICO_CANCELADA_DLQ = "credito.reserva-limite.cancelada.v1.dlq";
     private static final String GRUPO_REPROCESSAMENTO = "risco-reprocessamento-dlq-v1";
     private static final int EXECUCOES_ATE_A_DLQ = 3;
     private static final Duration PRAZO = Duration.ofSeconds(20);
@@ -74,10 +80,12 @@ class ReprocessamentoDlqTest {
     @Value("${spring.embedded.kafka.brokers}") private String servidores;
 
     @SpyBean private AnaliseCreditoService analiseCreditoService;
+    @SpyBean private FluxoCreditoSolicitadoService fluxoCreditoSolicitadoService;
 
     private KafkaProducer<String, String> publicador;
     private KafkaConsumer<String, String> consumidorDaDlq;
     private KafkaConsumer<String, String> consumidorDoTopico;
+    private KafkaConsumer<String, String> consumidorDaDlqDoReservado;
 
     @BeforeEach
     void preparar() {
@@ -92,14 +100,16 @@ class ReprocessamentoDlqTest {
         publicador = new KafkaProducer<>(doPublicador);
 
         // Cada teste enxerga e reprocessa apenas o que ele proprio produziu: os leitores
-        // comecam no fim dos topicos e o grupo de reprocessamento, no fim da DLQ.
+        // comecam no fim dos topicos e o grupo de reprocessamento, no fim de cada DLQ.
         consumidorDaDlq = leitorNoFim(TOPICO_DLQ);
         consumidorDoTopico = leitorNoFim(TOPICO);
+        consumidorDaDlqDoReservado = leitorNoFim(TOPICO_RESERVADO_DLQ);
         try (var grupo = consumidor(GRUPO_REPROCESSAMENTO)) {
-            var particoes = particoes(grupo, TOPICO_DLQ);
             var fim = new LinkedHashMap<TopicPartition, OffsetAndMetadata>();
-            grupo.endOffsets(particoes).forEach((particao, offset) ->
-                    fim.put(particao, new OffsetAndMetadata(offset)));
+            for (String dlq : List.of(TOPICO_DLQ, TOPICO_RESERVADO_DLQ, TOPICO_CANCELADA_DLQ)) {
+                grupo.endOffsets(particoes(grupo, dlq)).forEach((particao, offset) ->
+                        fim.put(particao, new OffsetAndMetadata(offset)));
+            }
             grupo.commitSync(fim);
         }
     }
@@ -109,6 +119,7 @@ class ReprocessamentoDlqTest {
         publicador.close();
         consumidorDaDlq.close();
         consumidorDoTopico.close();
+        consumidorDaDlqDoReservado.close();
     }
 
     @Test
@@ -128,7 +139,8 @@ class ReprocessamentoDlqTest {
         assertThat(republicado).isNotNull();
         assertThat(republicado.key()).isEqualTo("sol-201");
         assertThat(republicado.partition()).isEqualTo(original.partition());
-        // Os mesmos cabecalhos ce_* do original, e nenhum kafka_dlt-* da passagem pela DLQ.
+        // Os mesmos cabecalhos ce_* do original, e nenhum kafka_dlt-* ou classificacao da
+        // passagem pela DLQ.
         assertThat(cabecalhos(republicado)).isEqualTo(cabecalhos(original));
         // O campo que o servico-risco nao declara e o offset de Brasilia sobrevivem a
         // reserializacao da DLQ.
@@ -196,18 +208,64 @@ class ReprocessamentoDlqTest {
 
     @Test
     void falhaComumAosDoisGruposERepublicadaUmaUnicaVez() {
-        String payloadInvalido = "{ isso nao e json valido";
-        publicar("evt-reprocessa-004", "sol-204", payloadInvalido);
+        doThrow(new DataAccessResourceFailureException("banco indisponivel"))
+                .when(analiseCreditoService).processar(any(), any());
+        doThrow(new DataAccessResourceFailureException("banco indisponivel"))
+                .when(fluxoCreditoSolicitadoService).agregar(any(), any());
+        publicar("evt-reprocessa-004", "sol-204", eventoJson("sol-204"));
         publicador.flush();
+        lerDe(consumidorDoTopico);
         assertThat(lerTodosDe(consumidorDaDlq, Duration.ofSeconds(8))).hasSize(2);
+
+        doCallRealMethod().when(analiseCreditoService).processar(any(), any());
+        doCallRealMethod().when(fluxoCreditoSolicitadoService).agregar(any(), any());
+        assertThat(reprocessamento.reprocessar()).isEqualTo(1);
+
+        // Uma unica republicacao, lida pelos dois grupos.
+        assertThat(lerTodosDe(consumidorDoTopico, Duration.ofSeconds(3))).hasSize(1);
+        Awaitility.await().atMost(PRAZO).untilAsserted(() -> {
+            assertThat(analiseCreditoRepository.contar()).isEqualTo(1);
+            verify(fluxoCreditoSolicitadoService, times(EXECUCOES_ATE_A_DLQ + 1)).agregar(any(), any());
+        });
+    }
+
+    @Test
+    void falhaPermanenteFicaNaDlqSemSerRepublicada() {
+        publicar("evt-reprocessa-005", "sol-205", "{ isso nao e json valido");
+        publicador.flush();
+        lerDe(consumidorDoTopico);
+        assertThat(lerTodosDe(consumidorDaDlq, Duration.ofSeconds(8))).hasSize(2).allSatisfy(registro ->
+                assertThat(cabecalho(registro, "classificacao")).isEqualTo("PERMANENTE"));
+
+        assertThat(reprocessamento.reprocessar()).isZero();
+
+        assertThat(lerDe(consumidorDoTopico, Duration.ofSeconds(3))).isNull();
+    }
+
+    @Test
+    void desfechoDaSagaQueFoiParaADlqEAplicadoPeloReprocessamento() {
+        // LimiteDeCreditoReservado antes do CreditoSolicitado: a analise ainda nao existe, as
+        // tentativas se esgotam e o evento vai para a DLQ da saga.
+        var reserva = new ProducerRecord<String, String>(TOPICO_RESERVADO, "sol-206", """
+                {"eventoId":"evt-reserva-206","solicitacaoId":"sol-206","clienteId":"cli-ficticio-001",
+                 "valorReservado":15000.00,"limiteDisponivel":5000.00,"dataReserva":"2026-08-15T20:31:00-03:00"}
+                """);
+        adicionarCabecalhosCe(reserva, "evt-reserva-206", "/credito/limites");
+        publicador.send(reserva);
+        publicador.flush();
+        ConsumerRecord<String, String> naDlq = lerDe(consumidorDaDlqDoReservado);
+        assertThat(naDlq).isNotNull();
+        assertThat(cabecalho(naDlq, "classificacao")).isEqualTo("TRANSITORIA");
+
+        publicar("evt-reprocessa-006", "sol-206", eventoJson("sol-206"));
+        publicador.flush();
+        Awaitility.await().atMost(PRAZO).untilAsserted(() ->
+                assertThat(analiseCreditoRepository.buscarStatus("sol-206")).contains("PENDENTE"));
 
         assertThat(reprocessamento.reprocessar()).isEqualTo(1);
 
-        var noTopico = lerTodosDe(consumidorDoTopico, Duration.ofSeconds(3));
-        assertThat(noTopico).hasSize(2).allSatisfy(registro ->
-                assertThat(registro.value()).isEqualTo(payloadInvalido));
-        // Falha permanente volta para a DLQ, uma vez por grupo, sem se multiplicar.
-        assertThat(lerTodosDe(consumidorDaDlq, Duration.ofSeconds(8))).hasSize(2);
+        Awaitility.await().atMost(PRAZO).untilAsserted(() ->
+                assertThat(analiseCreditoRepository.buscarStatus("sol-206")).contains("RESERVADA"));
     }
 
     private KafkaConsumer<String, String> consumidor(String grupo) {
@@ -280,12 +338,16 @@ class ReprocessamentoDlqTest {
 
     private void publicar(String eventoId, String solicitacaoId, String valor) {
         var registro = new ProducerRecord<String, String>(TOPICO, solicitacaoId, valor);
+        adicionarCabecalhosCe(registro, eventoId, "/credito/solicitacoes");
+        publicador.send(registro);
+    }
+
+    private void adicionarCabecalhosCe(ProducerRecord<String, String> registro, String eventoId, String origem) {
         registro.headers().add("ce_specversion", "1.0".getBytes(UTF_8));
         registro.headers().add("ce_id", eventoId.getBytes(UTF_8));
-        registro.headers().add("ce_source", "/credito/solicitacoes".getBytes(UTF_8));
-        registro.headers().add("ce_type", TOPICO.getBytes(UTF_8));
+        registro.headers().add("ce_source", origem.getBytes(UTF_8));
+        registro.headers().add("ce_type", registro.topic().getBytes(UTF_8));
         registro.headers().add("ce_time", "2026-08-15T20:30:00-03:00".getBytes(UTF_8));
-        publicador.send(registro);
     }
 
     private String eventoJson(String solicitacaoId) {

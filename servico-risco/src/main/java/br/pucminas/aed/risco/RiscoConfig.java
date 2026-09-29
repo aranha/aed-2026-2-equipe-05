@@ -103,20 +103,16 @@ public class RiscoConfig {
     }
 
     /**
-     * Um unico publicador para todas as DLQs do servico. O destino e {@code <topico>.dlq}; se o
-     * registro ja veio de uma DLQ (falha durante o reprocessamento), ele volta para a mesma DLQ
-     * com o contador {@code reprocessamentos} incrementado, e nao para {@code .dlq.dlq}.
+     * Um unico publicador para todas as DLQs do servico, com destino {@code <topico>.dlq}. O
+     * reprocessamento republica no topico original, entao uma nova falha volta para a mesma DLQ.
      */
     @Bean
     public DeadLetterPublishingRecoverer publicadorDaDlq(
             KafkaTemplate<String, Object> clienteDaDlq,
             @Value("${app.kafka.topico.sufixo-dlq}") String sufixoDlq) {
         var recuperador = new DeadLetterPublishingRecoverer(clienteDaDlq,
-                (registro, falha) -> new TopicPartition(
-                        registro.topic().endsWith(sufixoDlq) ? registro.topic() : registro.topic() + sufixoDlq,
-                        -1));
-        recuperador.setHeadersFunction(new CabecalhosDeFalhaFunction(sufixoDlq));
-        recuperador.setAppendOriginalHeaders(false);
+                (registro, falha) -> new TopicPartition(registro.topic() + sufixoDlq, -1));
+        recuperador.setHeadersFunction(new CabecalhosDeFalhaFunction());
         // Sem isso o envio para a DLQ so aparece em DEBUG: a mensagem sumiria do fluxo sem
         // deixar rastro no log da aplicacao.
         recuperador.setLogRecoveryRecord(true);
