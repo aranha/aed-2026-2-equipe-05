@@ -52,8 +52,8 @@ public class CompensacaoReservaListener {
             throw new IllegalArgumentException("topico de compensacao nao reconhecido: " + registro.topic());
         }
 
-        var cancelamento = compensacaoReservaService.cancelar(eventoId, solicitacaoId, motivo);
-        reservaCanceladaPublicacaoService.publicar(cancelamento);
+        compensacaoReservaService.cancelar(eventoId, solicitacaoId, motivo)
+                .ifPresent(reservaCanceladaPublicacaoService::publicar);
         confirmacao.acknowledge();
     }
 
