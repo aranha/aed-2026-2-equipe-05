@@ -54,3 +54,15 @@
 #### Recusa da sugestão da IA
 
 - Para não deixar a seção de "consequências aceitas" do `arquitetura.md` com um `TODO` vazio, a IA sugeriu preencher com um número placeholder de tentativas de retentativa contra o Core Bancário (ex.: "3 tentativas com backoff exponencial"). Recusei essa sugestão: quantas tentativas e por quê é exatamente a decisão que a rubrica atribui à `ADR-006`, de responsabilidade do Hugo. Preencher esse número agora, mesmo como placeholder, tiraria dele a autoria de uma decisão que é parte da nota individual dele, e criaria risco de o documento ficar inconsistente com o que ele decidir de fato. Mantive a seção como `TODO`, apontando explicitamente para a `ADR-006`.
+
+## Etapa final — projeto final (Parte A)
+
+### Registro da interação com IA
+
+#### 1. Interação usada para implementar e documentar o reprocessamento da DLQ do `servico-risco`
+
+- Pedi à IA para estudar o caminho de falha do `servico-risco` (listener, retentativa, DLQ, dedup por `ce_id` e testes) e me explicar como ele funciona hoje antes de editar qualquer arquivo.
+- Pedi que propusesse mecanismos de reprocessamento com prós e contras. A IA apresentou três: um componente acionado sob demanda que republica no tópico original, um script com as ferramentas de linha de comando do Kafka e a reexecução direta do serviço de análise a partir da DLQ. Recomendou o primeiro, e eu o escolhi.
+- A IA apontou que uma falha comum aos dois grupos de consumo gera dois registros na DLQ para a mesma mensagem e propôs republicar uma única vez por registro de origem. Aceitei.
+- Durante a implementação, a IA identificou que, quando o listener falha, o evento reserializado na DLQ perde o `canalOrigem`, campo obrigatório no contrato v1, e propôs que o evento do `servico-risco` preservasse os campos que não declara. Aceitei essa opção no lugar de mudar o que os listeners recebem ou apenas documentar a limitação.
+- A IA implementou o `ReprocessamentoDlqService` e os testes em `ReprocessamentoDlqTest`, escreveu a seção de reprocessamento do README e executou esse passo a passo contra o ambiente do `docker compose`.
