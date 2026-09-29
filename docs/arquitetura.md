@@ -87,7 +87,7 @@ flowchart LR
     SR_SAGA --> SR_DB
 ```
 
-Cada tópico consumido tem uma DLQ `<tópico>.dlq`: `credito.solicitacao.solicitada.v1.dlq`, `credito.limite.reservado.v1.dlq` e `credito.reserva-limite.cancelada.v1.dlq` no `servico-risco`; `credito.elegibilidade.aprovada.v1.dlq`, `credito.proposta.recusada.v1.dlq` e `credito.proposta.expirada.v1.dlq` no `servico-credito`. Cada serviço tem ainda um consumidor de reprocessamento das próprias DLQs, desligado por padrão.
+Cada tópico consumido tem uma DLQ `<tópico>.dlq`: `credito.solicitacao.solicitada.v1.dlq`, `credito.limite.reservado.v1.dlq` e `credito.reserva-limite.cancelada.v1.dlq` no `servico-risco`; `credito.elegibilidade.aprovada.v1.dlq`, `credito.proposta.recusada.v1.dlq` e `credito.proposta.expirada.v1.dlq` no `servico-credito`. O `servico-risco` reprocessa as próprias DLQs sob demanda: subindo com `app.kafka.reprocessamento-dlq.habilitado=true`, ele republica no tópico de origem os registros `TRANSITORIA` e deixa os `PERMANENTE` na DLQ. O `servico-credito` não tem reprocessador; uma compensação ou reserva que ficou na DLQ é republicada à mão pela Kafka UI, com a mesma chave e os mesmos `ce_*` (ver [ADR-006](adr/ADR-006-retentativa-dlq-e-falha-da-compensacao.md) e o README).
 
 O caminho de uma solicitação, com os números do teste de compensação:
 
@@ -146,7 +146,7 @@ select solicitacao_id, count(*) from cancelamento_reserva group by solicitacao_i
 
 A consulta é uma conferência: a tabela já tem `solicitacao_id` único, e o banco recusa limite disponível acima do total (`check (limite_disponivel <= limite_total)`). Quando o desembolso existir, a mesma consulta vale para os desembolsos por `solicitacaoId`.
 
-Os logs completam o quadro: toda publicação registra partição e offset, todo envio para a DLQ é registrado, e o reprocessamento registra cada registro reexecutado ou ignorado.
+Os logs completam o quadro: toda publicação registra partição e offset, todo envio para a DLQ é registrado, e o reprocessamento do `servico-risco` registra cada registro republicado ou ignorado.
 
 ## 8. O que ficou de fora, e o custo
 
