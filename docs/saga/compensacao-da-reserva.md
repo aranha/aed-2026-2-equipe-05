@@ -91,8 +91,8 @@ Exemplo de conteúdo:
   "eventoOrigemId": "evt-recusa-vinicius-02",
   "solicitacaoId": "sol-vinicius-02",
   "clienteId": "cli-vinicius-02",
-  "valorDevolvido": 3000.00,
-  "limiteDisponivel": 10000.00,
+  "valorDevolvido": 3000.0,
+  "limiteDisponivel": 10000.0,
   "motivo": "PROPOSTA_RECUSADA",
   "dataCancelamento": "..."
 }
@@ -167,7 +167,7 @@ Value:
   "eventoId": "evt-eleg-vinicius-02",
   "solicitacaoId": "sol-vinicius-02",
   "clienteId": "cli-vinicius-02",
-  "valorAprovado": 3000.00,
+  "valorAprovado": 3000.0,
   "dataAprovacao": "2026-09-13T15:20:00-03:00"
 }
 ```
@@ -240,10 +240,10 @@ Resultado esperado:
 ### 7. Conferir que a reserva original continua existindo
 
 ```powershell
-docker exec -i aed-equipe-05-postgres psql -U aed -d aed -c "SELECT solicitacao_id, cliente_id, valor_reservado, status FROM reserva_limite WHERE solicitacao_id = 'sol-vinicius-02';"
+docker exec -i aed-equipe-05-postgres psql -U aed -d aed -c "SELECT solicitacao_id, cliente_id, valor_reservado, status, cancelada_em FROM reserva_limite WHERE solicitacao_id = 'sol-vinicius-02';"
 ```
 
-A reserva não deve ser apagada.
+A reserva não deve ser apagada: ela continua na tabela com `status = CANCELADA` e `cancelada_em` preenchido, que é o desfecho observável da compensação.
 
 ### 8. Conferir o registro de compensação
 
