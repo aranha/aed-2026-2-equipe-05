@@ -1,5 +1,6 @@
 package br.pucminas.aed.risco;
 
+import br.pucminas.aed.risco.service.ReprocessamentoDlqService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
@@ -13,6 +14,8 @@ import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.apache.kafka.common.serialization.Serializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.ApplicationRunner;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.kafka.KafkaProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -104,5 +107,12 @@ public class RiscoConfig {
                 DataIntegrityViolationException.class);
         tratador.setCommitRecovered(true);
         return tratador;
+    }
+
+    /** Reprocessa a DLQ uma vez, na inicializacao, somente quando pedido explicitamente. */
+    @Bean
+    @ConditionalOnProperty("app.kafka.reprocessamento-dlq.habilitado")
+    public ApplicationRunner reprocessamentoDaDlqNaInicializacao(ReprocessamentoDlqService reprocessamento) {
+        return argumentos -> reprocessamento.reprocessar();
     }
 }

@@ -1,19 +1,25 @@
 package br.pucminas.aed.risco.domain;
 
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import com.fasterxml.jackson.annotation.JsonAnySetter;
 import com.fasterxml.jackson.annotation.JsonCreator;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 
-@JsonIgnoreProperties(ignoreUnknown = true)
 public final class CreditoSolicitadoEvent {
     private final String eventoId;
     private final String solicitacaoId;
     private final String clienteId;
     private final BigDecimal valorSolicitado;
     private final OffsetDateTime dataSolicitacao;
+    // Campos do contrato que o servico-risco nao usa (ex.: canalOrigem). Sao ignorados no
+    // processamento, mas guardados para que o evento reserializado na DLQ, e republicado no
+    // reprocessamento, continue completo.
+    private final Map<String, Object> camposNaoUsados = new LinkedHashMap<>();
 
     @JsonCreator
     public CreditoSolicitadoEvent(@JsonProperty("eventoId") String eventoId,
@@ -33,4 +39,10 @@ public final class CreditoSolicitadoEvent {
     public String getClienteId() { return clienteId; }
     public BigDecimal getValorSolicitado() { return valorSolicitado; }
     public OffsetDateTime getDataSolicitacao() { return dataSolicitacao; }
+
+    @JsonAnyGetter
+    private Map<String, Object> getCamposNaoUsados() { return camposNaoUsados; }
+
+    @JsonAnySetter
+    private void guardarCampoNaoUsado(String nome, Object valor) { camposNaoUsados.put(nome, valor); }
 }
