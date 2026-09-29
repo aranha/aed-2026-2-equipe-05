@@ -297,7 +297,7 @@ A política é configurável por variável de ambiente: `RETENTATIVA_TENTATIVAS`
 **O que acontece.** Com `--app.kafka.reprocessamento-dlq.habilitado=true` (ou `REPROCESSAR_DLQ=true`), o `servico-risco` lê a DLQ uma vez, na inicialização, e republica cada registro em `credito.solicitacao.solicitada.v1`:
 
 - com a mesma chave (`solicitacaoId`), portanto na mesma partição dos demais eventos da solicitação;
-- com o mesmo corpo e os mesmos cabeçalhos `ce_*`. Os cabeçalhos `kafka_dlt-*` são removidos: eles descrevem a falha anterior e não fazem parte do contrato do tópico; se a mensagem falhar de novo, a DLQ grava os da nova falha;
+- com os mesmos cabeçalhos `ce_*` e o corpo que está na DLQ: o original, quando a desserialização falhou, ou o evento reserializado com os mesmos campos e valores, incluindo o offset `-03:00` da data, quando o listener falhou. Os cabeçalhos `kafka_dlt-*` são removidos: eles descrevem a falha anterior e não fazem parte do contrato do tópico; se a mensagem falhar de novo, a DLQ grava os da nova falha;
 - uma vez por registro de origem: quando os dois grupos do serviço falham na mesma mensagem, a DLQ tem duas cópias, e só uma é republicada.
 
 A leitura vai do ponto em que o grupo `risco-reprocessamento-dlq-v1` parou até o fim que a DLQ tinha no início da execução, e o offset só é confirmado depois que o broker aceita a republicação. Uma mensagem que falhar de novo passa pela retentativa normal e volta para a DLQ depois desse fim: fica para a próxima execução, sem loop. Os registros não são apagados da DLQ; ficam lá até a retenção do broker.
@@ -365,7 +365,11 @@ Resultado esperado: uma linha em cada consulta, com a análise em `PENDENTE`.
 
 ### Por que é idempotente
 
-A mensagem republicada leva o mesmo `ce_id`, e os consumidores deduplicam por ele. A análise registra o `ce_id` em `evento_processado` na mesma transação em que grava `analise_credito` (`on conflict do nothing`); o agregador de fluxo guarda em memória os `eventoId` das janelas retidas. Por isso, reprocessar o mesmo registro de novo, por engano ou de propósito, não cria outra análise. Para ver:
+A mensagem republicada leva o mesmo `ce_id`, e a análise deduplica por ele: o `ce_id` é registrado em `evento_processado` na mesma transação em que `analise_credito` é gravada (`on conflict do nothing`). Por isso, reprocessar o mesmo registro de novo, por engano ou de propósito, não cria outra análise.
+
+O agregador de fluxo também recebe a mensagem republicada, mas o estado dele fica em memória e o reprocessamento reinicia o serviço. Por isso, ele conta o evento uma vez no novo processo, como qualquer evento que chega depois de um reinício (ver [Consumidor de fluxo por janela de tempo](#consumidor-de-fluxo-por-janela-de-tempo)).
+
+Para ver a idempotência da análise:
 
 1. Pare o `servico-risco` (Ctrl+C) e volte o grupo de reprocessamento para o início da DLQ:
 

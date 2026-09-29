@@ -118,6 +118,10 @@ public class ReprocessamentoDlqService {
     @SuppressWarnings("unchecked")
     private Consumer<String, byte[]> criarConsumidor() {
         var sobrescritas = new Properties();
+        // Fixos aqui, e nao herdados da configuracao geral: sem registro confirmado, a primeira
+        // execucao precisa ler a DLQ desde o inicio, e o offset so pode ser confirmado apos o ack.
+        sobrescritas.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+        sobrescritas.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
         sobrescritas.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         sobrescritas.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class);
         return (Consumer<String, byte[]>) fabricaDeConsumidores.createConsumer(grupo, null, null, sobrescritas);

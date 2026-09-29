@@ -130,8 +130,11 @@ class ReprocessamentoDlqTest {
         assertThat(republicado.partition()).isEqualTo(original.partition());
         // Os mesmos cabecalhos ce_* do original, e nenhum kafka_dlt-* da passagem pela DLQ.
         assertThat(cabecalhos(republicado)).isEqualTo(cabecalhos(original));
-        // O campo que o servico-risco nao declara sobrevive a reserializacao da DLQ.
-        assertThat(republicado.value()).contains("\"canalOrigem\":\"APP\"");
+        // O campo que o servico-risco nao declara e o offset de Brasilia sobrevivem a
+        // reserializacao da DLQ.
+        assertThat(republicado.value())
+                .contains("\"canalOrigem\":\"APP\"")
+                .contains("\"dataSolicitacao\":\"2026-08-15T20:30:00-03:00\"");
 
         Awaitility.await().atMost(PRAZO).untilAsserted(() ->
                 assertThat(analiseCreditoRepository.contar()).isEqualTo(1));

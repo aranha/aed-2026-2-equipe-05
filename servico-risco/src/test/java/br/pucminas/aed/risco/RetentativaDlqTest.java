@@ -141,12 +141,10 @@ class RetentativaDlqTest {
         assertThat(cabecalho(naDlq, "ce_id")).isEqualTo("evt-transitorio-esgota");
 
         // Falha de listener: o evento ja desserializado e reserializado pelo publicador da DLQ.
-        // A data sai em ISO-8601, e nao como epoch. O offset aparece como UTC porque o
-        // JsonDeserializer do consumidor normaliza OffsetDateTime para o fuso do contexto --
-        // o instante e o mesmo, e o offset original de Brasilia continua intacto no ce_time.
+        // A data sai em ISO-8601 com o offset de Brasilia recebido, e nao como epoch ou UTC.
         assertThat(naDlq.value())
                 .contains("\"solicitacaoId\":\"sol-102\"")
-                .contains("\"dataSolicitacao\":\"2026-08-15T23:30:00Z\"");
+                .contains("\"dataSolicitacao\":\"2026-08-15T20:30:00-03:00\"");
         assertThat(cabecalho(naDlq, "ce_time")).isEqualTo("2026-08-15T20:30:00-03:00");
 
         verify(analiseCreditoService, times(TENTATIVAS + 1)).processar(any(), any());
