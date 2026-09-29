@@ -35,6 +35,11 @@ app:
     grupo:
       fluxo-credito: ${KAFKA_GRUPO_FLUXO_CREDITO:risco-fluxo-creditos-v1}
       saga-reserva: ${KAFKA_GRUPO_SAGA_RESERVA:risco-saga-reserva-v1}
+      reprocessamento-dlq: ${KAFKA_GRUPO_REPROCESSAMENTO_DLQ:risco-reprocessamento-dlq-v1}
+    # Desligado por padrao: reprocessar a DLQ e decisao do operador, depois de corrigir a
+    # causa da falha. Ver a secao "Reprocessamento da DLQ" do README.
+    reprocessamento-dlq:
+      habilitado: ${REPROCESSAR_DLQ:false}
     topico:
       credito-solicitado: credito.solicitacao.solicitada.v1
       limite-reservado: credito.limite.reservado.v1

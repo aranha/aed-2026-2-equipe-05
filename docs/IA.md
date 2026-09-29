@@ -60,10 +60,13 @@
 
 ### Registro da interação com IA
 
-#### 1. ADR-006 (Parte C)
+#### 1. Reprocessamento da DLQ do `servico-risco` (Parte A)
 
-- A equipe pediu à IA para redigir a ADR-006 a partir do código de retentativa e DLQ do `servico-risco`, da ADR-002 e das duas perguntas da devolutiva: quantas tentativas contra o Core Bancário, e o que acontece se a compensação falhar.
-- A IA observou que o Core Bancário não existe no código e propôs responder em dois planos: a política implementada nos consumidores (quatro retentativas, 7,5 s no pior caso, abaixo do `max.poll.interval.ms`) e a regra que vale para o desembolso quando ele existir (no máximo três tentativas, sempre com a mesma chave de idempotência e só quando o Core responde que não processou; timeout tratado como resultado desconhecido e enviado para a DLQ, sem retentativa automática). Aceitamos essa estrutura e revisamos as consequências aceitas.
+- Pedi à IA para estudar o caminho de falha do `servico-risco` (listener, retentativa, DLQ, dedup por `ce_id` e testes) e me explicar como ele funciona hoje antes de editar qualquer arquivo.
+- Pedi que propusesse mecanismos de reprocessamento com prós e contras. A IA apresentou três: um componente acionado sob demanda que republica no tópico original, um script com as ferramentas de linha de comando do Kafka e a reexecução direta do serviço de análise a partir da DLQ. Recomendou o primeiro, e eu o escolhi.
+- A IA apontou que uma falha comum aos dois grupos de consumo gera dois registros na DLQ para a mesma mensagem e propôs republicar uma única vez por registro de origem. Aceitei.
+- Durante a implementação, a IA identificou que, quando o listener falha, o evento reserializado na DLQ perde o `canalOrigem`, campo obrigatório no contrato v1, e propôs que o evento do `servico-risco` preservasse os campos que não declara. Aceitei essa opção no lugar de mudar o que os listeners recebem ou apenas documentar a limitação.
+- A IA implementou o `ReprocessamentoDlqService` e os testes em `ReprocessamentoDlqTest`, escreveu a seção de reprocessamento do README e executou esse passo a passo contra o ambiente do `docker compose`.
 
 #### 2. Saga e compensação (Parte B)
 
@@ -73,3 +76,8 @@
 #### Recusa da sugestão da IA
 
 - Para responder "em que passo está esta solicitação", a IA sugeriu tornar a Solicitação de Crédito um agregado event sourced, com event store append-only e uma projeção reconstruída por replay. Recusamos: o custo (dois modelos, evolução de esquema dos eventos por upcasting, dado pessoal num log imutável) não se paga para uma pergunta que dois status respondem. Ficaram `analise_credito.status` (`PENDENTE`, `RESERVADA`, `CANCELADA`), alimentado pelos eventos da saga, e `reserva_limite.status` com `cancelada_em`, consultados pelas queries da seção 7 do `arquitetura.md`.
+
+#### 3. ADR-006 (Parte C)
+
+- A equipe pediu à IA para redigir a ADR-006 a partir do código de retentativa e DLQ do `servico-risco`, da ADR-002 e das duas perguntas da devolutiva: quantas tentativas contra o Core Bancário, e o que acontece se a compensação falhar.
+- A IA observou que o Core Bancário não existe no código e propôs responder em dois planos: a política implementada nos consumidores (quatro retentativas, 7,5 s no pior caso, abaixo do `max.poll.interval.ms`) e a regra que vale para o desembolso quando ele existir (no máximo três tentativas, sempre com a mesma chave de idempotência e só quando o Core responde que não processou; timeout tratado como resultado desconhecido e enviado para a DLQ, sem retentativa automática). Aceitamos essa estrutura e revisamos as consequências aceitas.
