@@ -290,6 +290,104 @@ docker exec -it aed-equipe-05-kafka /opt/kafka/bin/kafka-console-consumer.sh --b
 
 A política é configurável por variável de ambiente: `RETENTATIVA_TENTATIVAS`, `RETENTATIVA_INTERVALO_INICIAL_MS`, `RETENTATIVA_MULTIPLICADOR` e `RETENTATIVA_INTERVALO_MAXIMO_MS`.
 
+## Reprocessamento da DLQ
+
+**Quando usar.** Depois de corrigir a causa de uma falha transitória que esgotou as retentativas (por exemplo, o banco voltou ao ar), para devolver ao fluxo o que ficou em `credito.solicitacao.solicitada.v1.dlq`. Um registro com falha permanente (payload inválido, `ce_id` ausente) volta para a DLQ com o mesmo motivo: ele exige corrigir o dado na origem, e não reprocessar.
+
+**O que acontece.** Com `--app.kafka.reprocessamento-dlq.habilitado=true` (ou `REPROCESSAR_DLQ=true`), o `servico-risco` lê a DLQ uma vez, na inicialização, e republica cada registro em `credito.solicitacao.solicitada.v1`:
+
+- com a mesma chave (`solicitacaoId`), portanto na mesma partição dos demais eventos da solicitação;
+- com o mesmo corpo e os mesmos cabeçalhos `ce_*`. Os cabeçalhos `kafka_dlt-*` são removidos: eles descrevem a falha anterior e não fazem parte do contrato do tópico; se a mensagem falhar de novo, a DLQ grava os da nova falha;
+- uma vez por registro de origem: quando os dois grupos do serviço falham na mesma mensagem, a DLQ tem duas cópias, e só uma é republicada.
+
+A leitura vai do ponto em que o grupo `risco-reprocessamento-dlq-v1` parou até o fim que a DLQ tinha no início da execução, e o offset só é confirmado depois que o broker aceita a republicação. Uma mensagem que falhar de novo passa pela retentativa normal e volta para a DLQ depois desse fim: fica para a próxima execução, sem loop. Os registros não são apagados da DLQ; ficam lá até a retenção do broker.
+
+### Passo a passo
+
+Com a infraestrutura e os dois serviços rodando (passos 1 a 4 de [Como rodar o projeto](#como-rodar-o-projeto)):
+
+1. Derrube o banco para provocar uma falha transitória:
+
+```bash
+docker compose stop postgres
+```
+
+2. Envie uma solicitação, como em [Chamada da API](#chamada-da-api-de-solicitação-de-crédito), e anote o `eventoId` e o `solicitacaoId` da resposta.
+
+3. Aguarde o log do `servico-risco` mostrar o envio para a DLQ. São 5 execuções e cada uma espera até 30 s por uma conexão com o banco, então leva cerca de 2 min 40 s:
+
+```text
+o.s.k.l.DeadLetterPublishingRecoverer    : Recovery record credito.solicitacao.solicitada.v1-2@2
+```
+
+4. Confira o registro na DLQ, com a chave, os cabeçalhos `ce_*` e o motivo em `kafka_dlt-exception-message`:
+
+```bash
+docker exec aed-equipe-05-kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server kafka:9094 --topic credito.solicitacao.solicitada.v1.dlq --from-beginning --timeout-ms 10000 --property print.headers=true --property print.key=true
+```
+
+5. Corrija a causa:
+
+```bash
+docker compose start postgres
+```
+
+6. Pare o `servico-risco` (Ctrl+C) e suba-o com o reprocessamento habilitado:
+
+```powershell
+java -jar servico-risco\target\servico-risco-0.0.1-SNAPSHOT.jar --app.kafka.reprocessamento-dlq.habilitado=true
+```
+
+No Linux/macOS ou Git Bash:
+
+```bash
+java -jar servico-risco/target/servico-risco-0.0.1-SNAPSHOT.jar --app.kafka.reprocessamento-dlq.habilitado=true
+```
+
+No Git Bash, prefixe os comandos `docker exec` com `MSYS_NO_PATHCONV=1`; sem isso, o caminho `/opt/kafka/...` é convertido para um caminho do Windows e o comando falha.
+
+### Como verificar
+
+O log de inicialização mostra uma linha por registro republicado e um resumo. A `origem` é a posição do `Recovery record` do passo 3, e o `destino` fica na mesma partição:
+
+```text
+Registro da DLQ republicado | ce_id=<eventoId> | origem=credito.solicitacao.solicitada.v1-2@2 | destino=credito.solicitacao.solicitada.v1-2@3
+Reprocessamento da DLQ concluido | topico=credito.solicitacao.solicitada.v1.dlq | republicados=1 | ignorados=0
+```
+
+Depois que os consumidores recebem as partições, a análise está gravada. Troque os ids pelos do passo 2:
+
+```bash
+docker exec -i aed-equipe-05-postgres psql -U aed -d aed -c "SELECT solicitacao_id, status FROM analise_credito WHERE solicitacao_id = '<solicitacaoId>';" -c "SELECT evento_id, processado_em FROM evento_processado WHERE evento_id = '<eventoId>';"
+```
+
+Resultado esperado: uma linha em cada consulta, com a análise em `PENDENTE`.
+
+### Por que é idempotente
+
+A mensagem republicada leva o mesmo `ce_id`, e os consumidores deduplicam por ele. A análise registra o `ce_id` em `evento_processado` na mesma transação em que grava `analise_credito` (`on conflict do nothing`); o agregador de fluxo guarda em memória os `eventoId` das janelas retidas. Por isso, reprocessar o mesmo registro de novo, por engano ou de propósito, não cria outra análise. Para ver:
+
+1. Pare o `servico-risco` (Ctrl+C) e volte o grupo de reprocessamento para o início da DLQ:
+
+```bash
+docker exec aed-equipe-05-kafka /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server kafka:9094 --group risco-reprocessamento-dlq-v1 --topic credito.solicitacao.solicitada.v1.dlq --reset-offsets --to-earliest --execute
+```
+
+2. Suba o serviço de novo com a flag, como no passo 6. O log mostra o mesmo `ce_id` republicado outra vez, com um novo `destino`.
+3. Rode as consultas de [Como verificar](#como-verificar): continua uma linha em cada, e o `processado_em` é o da primeira execução.
+
+Os mesmos cenários estão automatizados em `ReprocessamentoDlqTest`: a mensagem que falha vai para a DLQ e é republicada com o mesmo `ce_id`, a mesma chave e os mesmos cabeçalhos; reprocessada duas vezes, produz um único efeito; se voltar a falhar, retorna à DLQ uma única vez; e uma falha comum aos dois grupos é republicada uma só vez.
+
+```powershell
+mvn -f servico-risco\pom.xml -Dtest=ReprocessamentoDlqTest test
+```
+
+No Linux/macOS ou Git Bash:
+
+```bash
+mvn -f servico-risco/pom.xml -Dtest=ReprocessamentoDlqTest test
+```
+
 ## Idempotência
 
 O serviço de risco possui uma classe de teste dedicada para validar idempotência:
