@@ -4,7 +4,7 @@
 Aceita · 2026-09-29 · Equipe 05
 
 ## Contexto
-O Kafka entrega cada evento pelo menos uma vez, e não há ordem garantida entre tópicos diferentes. Um consumidor que falha precisa decidir se tenta de novo, por quanto tempo e para onde vai o evento quando desiste. No domínio da [ADR-002](ADR-002-dominio-do-projeto.md), decidir errado tem dois custos: o **duplo desembolso**, quando uma retentativa repete um efeito financeiro, e o **limite preso**, quando um evento é descartado e a reserva fica sem desfecho.
+O Kafka entrega cada evento pelo menos uma vez, e não há ordem garantida entre tópicos diferentes. Um consumidor que falha precisa decidir se tenta de novo, por quanto tempo e para onde vai o evento quando desiste. No domínio da [ADR-002](ADR-002-dominio.md), decidir errado tem dois custos: o **duplo desembolso**, quando uma retentativa repete um efeito financeiro, e o **limite preso**, quando um evento é descartado e a reserva fica sem desfecho.
 
 O ponto de partida no código:
 

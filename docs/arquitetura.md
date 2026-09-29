@@ -13,7 +13,7 @@ O sistema cobre a concessão de crédito da solicitação do cliente até o dese
 
 Dois riscos organizam as decisões: o **duplo desembolso** (o mesmo fato liberando dinheiro duas vezes sob reentrega) e o **limite preso** (reserva sem desfecho, deixando o cliente com menos limite do que tem).
 
-Neste recorte estão implementados os passos 1, 3 e 4 até a compensação. A avaliação de elegibilidade, a proposta, o contrato e o desembolso estão fora do código; os eventos que eles publicariam são publicados à mão pela Kafka UI para exercitar a saga. A justificativa do domínio está na [ADR-002](adr/ADR-002-dominio-do-projeto.md).
+Neste recorte estão implementados os passos 1, 3 e 4 até a compensação. A avaliação de elegibilidade, a proposta, o contrato e o desembolso estão fora do código; os eventos que eles publicariam são publicados à mão pela Kafka UI para exercitar a saga. A justificativa do domínio está na [ADR-002](adr/ADR-002-dominio.md).
 
 ## 2. Contrato do evento
 
@@ -38,8 +38,8 @@ A regra de compatibilidade é **FULL** para todos os eventos: campo novo entra c
 
 | ADR                                                              | Decisão                                                                                                                                              | Status |
 | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| [ADR-002](adr/ADR-002-dominio-do-projeto.md)                     | Domínio: concessão de crédito, pontos de decisão, sistemas externos, caminho de compensação, granularidade dos eventos e chave de deduplicação       | Aceita |
-| [ADR-006](adr/ADR-006-retentativa-dlq-e-falha-da-compensacao.md) | Retentativa limitada, DLQ com motivo, reprocessamento manual, falha da compensação, regra de retentativa contra o Core Bancário, coreografia da saga | Aceita |
+| [ADR-002](adr/ADR-002-dominio.md)                     | Domínio: concessão de crédito, pontos de decisão, sistemas externos, caminho de compensação, granularidade dos eventos e chave de deduplicação       | Aceita |
+| [ADR-006](adr/ADR-006-resiliencia.md) | Retentativa limitada, DLQ com motivo, reprocessamento manual, falha da compensação, regra de retentativa contra o Core Bancário, coreografia da saga | Aceita |
 
 ## 5. Visão geral dos componentes e fluxo de eventos
 
@@ -87,7 +87,7 @@ flowchart LR
     SR_SAGA --> SR_DB
 ```
 
-Cada tópico consumido tem uma DLQ `<tópico>.dlq`: `credito.solicitacao.solicitada.v1.dlq`, `credito.limite.reservado.v1.dlq` e `credito.reserva-limite.cancelada.v1.dlq` no `servico-risco`; `credito.elegibilidade.aprovada.v1.dlq`, `credito.proposta.recusada.v1.dlq` e `credito.proposta.expirada.v1.dlq` no `servico-credito`. O `servico-risco` reprocessa as próprias DLQs sob demanda: subindo com `app.kafka.reprocessamento-dlq.habilitado=true`, ele republica no tópico de origem os registros `TRANSITORIA` e deixa os `PERMANENTE` na DLQ. O `servico-credito` não tem reprocessador; uma compensação ou reserva que ficou na DLQ é republicada à mão pela Kafka UI, com a mesma chave e os mesmos `ce_*` (ver [ADR-006](adr/ADR-006-retentativa-dlq-e-falha-da-compensacao.md) e o README).
+Cada tópico consumido tem uma DLQ `<tópico>.dlq`: `credito.solicitacao.solicitada.v1.dlq`, `credito.limite.reservado.v1.dlq` e `credito.reserva-limite.cancelada.v1.dlq` no `servico-risco`; `credito.elegibilidade.aprovada.v1.dlq`, `credito.proposta.recusada.v1.dlq` e `credito.proposta.expirada.v1.dlq` no `servico-credito`. O `servico-risco` reprocessa as próprias DLQs sob demanda: subindo com `app.kafka.reprocessamento-dlq.habilitado=true`, ele republica no tópico de origem os registros `TRANSITORIA` e deixa os `PERMANENTE` na DLQ. O `servico-credito` não tem reprocessador; uma compensação ou reserva que ficou na DLQ é republicada à mão pela Kafka UI, com a mesma chave e os mesmos `ce_*` (ver [ADR-006](adr/ADR-006-resiliencia.md) e o README).
 
 O caminho de uma solicitação, com os números do teste de compensação:
 
@@ -98,9 +98,9 @@ O caminho de uma solicitação, com os números do teste de compensação:
 
 ## 6. Consequências aceitas e riscos assumidos
 
-Da [ADR-002](adr/ADR-002-dominio-do-projeto.md): estado de propostas de longa duração, idempotência crítica para evitar duplo desembolso, e sistemas externos simulados.
+Da [ADR-002](adr/ADR-002-dominio.md): estado de propostas de longa duração, idempotência crítica para evitar duplo desembolso, e sistemas externos simulados.
 
-Da [ADR-006](adr/ADR-006-retentativa-dlq-e-falha-da-compensacao.md), os riscos residuais do caminho de falha e da saga:
+Da [ADR-006](adr/ADR-006-resiliencia.md), os riscos residuais do caminho de falha e da saga:
 
 - **Partição parada por até 7,5 s** enquanto um registro retenta (quatro retentativas, 0,5 s a 4 s). Falha transitória mais longa vai para a DLQ.
 - **Limite preso enquanto a compensação estiver na DLQ.** Uma recusa que chega antes da reserva e esgota as tentativas só compensa quando alguém reprocessar a DLQ.
