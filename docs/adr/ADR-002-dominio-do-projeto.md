@@ -40,7 +40,7 @@ O processo inicia quando o cliente solicita um empréstimo (gatilho: CréditoSol
 - **Mercado Rápido — avaliação e reputação:** recusado porque, no recorte discutido, a compensação de uma avaliação já utilizada no cálculo de reputação não ficou claramente definida.
 - **Processo centralizado de concessão de crédito:** recusado porque concentraria elegibilidade, antifraude, contratação e liberação em um único serviço, aumentando o acoplamento e dificultando a evolução independente das fronteiras.
 
-## Consequencias aceitas
+## Consequências aceitas
 
 - O que esta decisão custa
 
