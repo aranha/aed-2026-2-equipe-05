@@ -30,12 +30,14 @@ public class ReservaLimiteService {
         boolean reservado = limiteCreditoRepository.reservar(
                 elegibilidade.getClienteId(), elegibilidade.getValorAprovado(), agora);
 
+        // Cliente sem limite cadastrado ou com limite insuficiente nao se resolve retentando:
+        // IllegalArgumentException e classificada como falha permanente e vai direto para a DLQ.
         if (!reservado) {
             if (!limiteCreditoRepository.existe(elegibilidade.getClienteId())) {
-                throw new IllegalStateException(
+                throw new IllegalArgumentException(
                         "limite de credito nao cadastrado para o cliente " + elegibilidade.getClienteId());
             }
-            throw new IllegalStateException(
+            throw new IllegalArgumentException(
                     "limite de credito insuficiente para a solicitacao " + elegibilidade.getSolicitacaoId());
         }
 
