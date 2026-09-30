@@ -81,3 +81,24 @@
 
 - A equipe pediu à IA para redigir a ADR-006 a partir do código de retentativa e DLQ do `servico-risco`, da ADR-002 e das duas perguntas da devolutiva: quantas tentativas contra o Core Bancário, e o que acontece se a compensação falhar.
 - A IA observou que o Core Bancário não existe no código e propôs responder em dois planos: a política implementada nos consumidores (quatro retentativas, 7,5 s no pior caso, abaixo do `max.poll.interval.ms`) e a regra que vale para o desembolso quando ele existir (no máximo três tentativas, sempre com a mesma chave de idempotência e só quando o Core responde que não processou; timeout tratado como resultado desconhecido e enviado para a DLQ, sem retentativa automática). Aceitamos essa estrutura e revisamos as consequências aceitas.
+
+#### 4. ADR-005 e folha de rosto da aula 05
+
+- Pedimos à IA que auditasse o repositório contra a árvore de arquivos do enunciado do
+  projeto final e completasse o que faltasse.
+- Para a ADR-005, a IA identificou que a decisão sobre Event Sourcing **já estava tomada e
+  registrada neste arquivo**, na recusa da seção anterior, e que faltava apenas promovê-la
+  ao formato de ADR. Redigiu o documento a partir dessa recusa, do `schema.sql` dos dois
+  serviços e das seções existentes da ADR-002 e da ADR-006.
+- A IA acrescentou a ADR-003 e a ADR-005 à tabela da seção 4 do `arquitetura.md`, que o
+  enunciado pede como índice dos quatro ADR com uma frase de consequência aceita por ADR.
+
+#### Recusa da sugestão da IA
+
+- Ao redigir a ADR-005, pedimos que ela também descrevesse o event store que teríamos
+  construído, para a seção de alternativas ficar mais completa. A IA recusou escrever a
+  alternativa como se tivesse sido projetada: argumentou que um ADR registra as opções que
+  a equipe de fato pesou, e que detalhar um desenho nunca discutido transformaria o
+  documento numa peça de ficção sobre a própria decisão — justamente o que a seção de
+  alternativas existe para evitar. Aceitamos, e a alternativa ficou descrita pelos custos
+  que pesaram na recusa, que foram os reais.

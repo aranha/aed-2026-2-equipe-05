@@ -133,6 +133,8 @@ O caminho de uma solicitação, com os números do teste de compensação:
 | ADR | Decisão | Consequência aceita |
 |---|---|---|
 | [ADR-002](adr/ADR-002-dominio.md) | Concessão de crédito como domínio, com a reserva de limite e sua compensação como caminho de exceção, e deduplicação por `ce_id` | O estado de propostas de longa duração e a idempotência do desembolso passam a ser responsabilidade do sistema, e os sistemas externos (bureau, antifraude, Core Bancário) ficam simulados |
+| [ADR-003](adr/ADR-003-chave-de-particao.md) | `solicitacaoId` como chave de partição, garantindo a ordem dos eventos de uma mesma solicitação | Agregar por qualquer outra dimensão — cliente ou canal — exige republicar o fluxo num tópico repartido, e o agregador só fecha correto com uma instância lendo as três partições |
+| [ADR-005](adr/ADR-005-event-sourcing.md) | Estado guardado em tabelas, e não reconstruído por replay de um event store; o log permanece append-only para os fatos | Perguntas novas sobre o passado só são respondidas se o dado tiver sido guardado na época, e os tópicos têm sete dias de retenção — o log não é arquivo |
 | [ADR-006](adr/ADR-006-resiliencia.md) | Retentativa limitada e bloqueante, DLQ por tópico com motivo e classificação, reprocessamento manual, compensação idempotente e saga coreografada | Uma partição fica parada enquanto um registro retenta, e uma compensação que cai na DLQ deixa o limite preso até alguém reprocessá-la |
 
 ## 5. Quando falha
